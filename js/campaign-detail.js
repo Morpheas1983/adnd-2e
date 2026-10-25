@@ -70,11 +70,4 @@ function renderCampaignDetail(container) {
 function render() { renderCampaignDetail(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.selectedCampaign) {
-    changeView('campaigns');
-} else {
-    renderCampaignDetail(document.getElementById('app'));
-}
+bootPage({}, () => State.selectedCampaign ? renderCampaignDetail(document.getElementById('app')) : changeView('campaigns'));

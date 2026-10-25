@@ -110,11 +110,4 @@ function saveCreature(id) {
 function render() { renderBestiary(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.isDM) {
-    changeView('dashboard');
-} else {
-    renderBestiary(document.getElementById('app'));
-}
+bootPage({ campaign: true, dm: true }, () => renderBestiary(document.getElementById('app')));

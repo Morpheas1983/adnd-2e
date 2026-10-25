@@ -137,11 +137,4 @@ function confirmLevelUp() {
 function render() { renderLevelUp(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.currentCharacter) {
-    changeView('dashboard');
-} else {
-    renderLevelUp(document.getElementById('app'));
-}
+bootPage({ character: true }, () => renderLevelUp(document.getElementById('app')));

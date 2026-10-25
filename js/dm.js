@@ -6,7 +6,7 @@ function renderDMView(container) {
         <div class="min-h-screen p-4">
             <div class="max-w-6xl mx-auto">
                 <div class="parchment scroll-border p-4 mb-4 fade-in">
-                    <div class="flex justify-between items-center">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
                         <div class="flex items-center gap-3">
 						<button onclick="changeView('dashboard')" class="btn-galactic px-3 py-2 rounded text-sm">
     <i class="fas fa-arrow-left"></i> Back
@@ -15,9 +15,9 @@ function renderDMView(container) {
                                 <i class="fas fa-dungeon mr-2 text-amber-700"></i>DM Party View
                             </h1>
                         </div>
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 flex-wrap items-center">
                             <div class="text-xs text-amber-800 flex items-center mr-2 border-r border-amber-300 pr-2">
-                                <span class="font-bold mr-1">Campaign:</span> ${State.campaignId || 'default'}
+                                <span class="font-bold mr-1">Campaign:</span> ${escapeHtml(currentCampaignName())}
                             </div>
                             <button onclick="changeView('campaign')" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-book mr-1"></i>Campaign
@@ -35,7 +35,7 @@ function renderDMView(container) {
                                 <i class="fas fa-scroll mr-1"></i>Campaigns
                             </button>
                             <button onclick="changeView('users')" class="btn-fantasy px-4 py-2 rounded text-sm">
-                                <i class="fas fa-users-cog mr-1"></i>Users
+                                <i class="fas fa-user-friends mr-1"></i>Players
                             </button>
                             <button onclick="showAssignCharModal()" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-user-tag mr-1"></i>Assign Chars
@@ -44,7 +44,7 @@ function renderDMView(container) {
                                 <i class="fas fa-bed mr-1"></i>Rest All
                             </button>
                             <div class="text-sm text-amber-800 flex items-center">
-                                ${campaignChars.length} Characters | ${new Set(campaignChars.map(c => c.player)).size} Players
+                                ${campaignChars.length} Characters | ${Object.values(Cloud.meta?.members || {}).filter(r => r === 'player').length} Players
                             </div>
                         </div>
                     </div>
@@ -60,7 +60,7 @@ function renderDMView(container) {
                             <div class="flex justify-between items-start mb-2">
                                 <div>
                                     <h3 class="fantasy-font font-bold text-amber-900">${char.name}</h3>
-                                    <p class="text-xs text-amber-700">${char.player} • ${char.race} ${char.class}</p>
+                                    <p class="text-xs text-amber-700">${escapeHtml(char.playerName || memberName(char.player))} • ${char.race} ${char.class}</p>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-xl font-bold text-amber-900 fantasy-font">${char.level}</div>
@@ -113,25 +113,27 @@ function dmViewCharacter(id) {
 }
 
 function showAssignCharModal() {
-    const unassigned = State.characters.filter(c => !c.player || c.player === 'default' || !(DB.users || []).find(u => u.username === c.player));
-    const players = (DB.users || []).filter(u => u.role === 'player');
+    const cid = State.campaignId;
+    const chars = State.characters.filter(c => c.campaignId === cid);
+    const members = Object.entries(Cloud.meta?.members || {}).map(([uid, role]) => ({ uid, role, name: memberName(uid) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     $('modalContainer').innerHTML = `
         <div class="modal-overlay" onclick="closeModal(event)">
             <div class="modal-content wide" onclick="event.stopPropagation()">
                 <div class="p-6">
-                    <h2 class="fantasy-font text-xl font-bold text-amber-900 mb-4">Assign Characters to Players</h2>
+                    <h2 class="fantasy-font text-xl font-bold text-amber-900 mb-1">Assign Characters to Players</h2>
+                    <p class="text-sm text-amber-700 mb-4">The chosen player becomes the owner and can open and edit the character.</p>
                     <div class="space-y-3 max-h-96 overflow-y-auto">
-                        ${unassigned.length === 0 ? '<p class="text-amber-700 italic">All characters are already assigned to players.</p>' : ''}
-                        ${unassigned.map(char => `
+                        ${chars.length === 0 ? '<p class="text-amber-700 italic">No characters in this campaign yet.</p>' : ''}
+                        ${chars.map(char => `
                             <div class="flex items-center justify-between p-3 bg-amber-100 rounded border border-amber-300">
                                 <div>
-                                    <div class="font-bold text-amber-900">${char.name}</div>
+                                    <div class="font-bold text-amber-900">${escapeHtml(char.name)}</div>
                                     <div class="text-xs text-amber-700">${char.race} ${char.class} • Level ${char.level}</div>
-                                    <div class="text-xs text-amber-600">Current: ${char.player || 'Unassigned'}</div>
                                 </div>
                                 <select onchange="assignCharacterToPlayer('${char.id}', this.value)" class="input-fantasy px-2 py-1 text-sm">
-                                    <option value="">-- Assign to --</option>
-                                    ${players.map(u => `<option value="${u.username}">${u.name} (${u.username})</option>`).join('')}
+                                    ${members.map(m => `<option value="${m.uid}" ${m.uid === char.player ? 'selected' : ''}>${escapeHtml(m.name)}${m.role === 'dm' ? ' (DM)' : ''}</option>`).join('')}
+                                    ${members.some(m => m.uid === char.player) ? '' : `<option value="" selected>${escapeHtml(char.playerName || 'Not in campaign')}</option>`}
                                 </select>
                             </div>
                         `).join('')}
@@ -145,26 +147,17 @@ function showAssignCharModal() {
     `;
 }
 
-function assignCharacterToPlayer(charId, username) {
+function assignCharacterToPlayer(charId, uid) {
     const char = State.characters.find(c => c.id === charId);
-    if (!char) return toast('Character not found', 'error');
-    const user = (DB.users || []).find(u => u.username === username);
-    if (!user) return toast('User not found', 'error');
-    char.player = username;
-    char.lastUpdated = Date.now();
+    if (!char || !uid) return;
+    if (!(Cloud.meta?.members || {})[uid]) return toast('That player is not in this campaign', 'error');
+    char.player = uid;
+    char.playerName = memberName(uid);
     Storage.save();
-    toast(`Character "${char.name}" assigned to ${user.name} (${username})`);
-    render();
+    toast(`"${char.name}" now belongs to ${char.playerName}`);
 }
 
 function render() { renderDMView(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.isDM) {
-    changeView('dashboard');
-} else {
-    renderDMView(document.getElementById('app'));
-}
+bootPage({ campaign: true, dm: true }, () => renderDMView(document.getElementById('app')));

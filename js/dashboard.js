@@ -1,15 +1,15 @@
 /* dashboard.js - Player Dashboard */
 function renderDashboard(container) {
-    const hasCampaignFilter = !!State.campaignId;
-    const campaignChars = hasCampaignFilter 
-        ? State.characters.filter(c => c.campaignId === State.campaignId)
-        : State.characters;
-    const myChars = State.isDM ? State.characters : campaignChars.filter(c => c.player === State.currentUser);
-
-    // For player campaign switcher: only show campaigns this player has characters in
-    const playerCampaigns = State.isDM 
-        ? [...new Set([...State.characters.map(c => c.campaignId).filter(Boolean), ...getKnownCampaigns()])]
-        : [...new Set([...State.characters.filter(c => c.player === State.currentUser).map(c => c.campaignId).filter(Boolean), ...getKnownCampaigns()])];
+    const cid = State.campaignId;
+    const inCampaign = !!cid;
+    const campaignChars = inCampaign ? State.characters.filter(c => c.campaignId === cid) : State.characters;
+    // DM sees the whole party; players see their own characters
+    const myChars = inCampaign
+        ? (State.isDM ? campaignChars : campaignChars.filter(c => c.player === State.currentUser))
+        : State.characters.filter(c => c.player === State.currentUser);
+    const hasCampaignFilter = inCampaign;
+    const role = inCampaign ? (Cloud.isAdmin && !(Cloud.meta?.members || {})[State.currentUser] ? 'Admin' : (State.isDM ? 'Dungeon Master' : 'Player')) : '';
+    const invite = State.isDM && Cloud.meta ? Cloud.meta.inviteCode : '';
 
     container.innerHTML = `
         <div class="min-h-screen p-4">
@@ -20,7 +20,10 @@ function renderDashboard(container) {
                             <i class="fas fa-dragon text-3xl text-amber-700"></i>
                             <div>
                                 <h1 class="fantasy-font text-2xl font-bold text-amber-900">AD&D 2e Character Manager</h1>
-                                <p class="text-sm text-amber-800">${State.isDM ? 'Dungeon Master View' : `Player: ${State.currentUserName || State.currentUser}`}${State.campaignId ? ` | Campaign: <span class="font-bold text-amber-900">${State.campaignId}</span>` : ' | <span class="font-bold text-amber-900">All Characters</span>'}</p>
+                                <p class="text-sm text-amber-800">
+                                    <i class="fas fa-user mr-1"></i>${escapeHtml(State.currentUserName)}${Cloud.isAdmin ? ' <span class="text-xs bg-amber-700 text-amber-50 px-1 rounded">ADMIN</span>' : ''}
+                                    ${inCampaign ? ` | <span class="font-bold text-amber-900">${escapeHtml(currentCampaignName())}</span> (${role})` : ' | <span class="font-bold text-amber-900">All my characters</span>'}
+                                </p>
                             </div>
                         </div>
                         <div class="flex gap-2 flex-wrap items-center">
@@ -28,53 +31,65 @@ function renderDashboard(container) {
                                 <i class="fas fa-wifi mr-1"></i>Connecting...
                             </span>
                             <div class="campaign-row flex items-center gap-2 border-r border-amber-300 pr-2 mr-1">
-                                <span class="text-xs text-amber-800 font-bold">View:</span>
-                                <select id="campaignSwitcher" onchange="switchCampaign(this.value)" class="input-fantasy text-xs px-2 py-1" style="min-width:140px">
-                                    <option value="" ${!State.campaignId ? 'selected' : ''}>All Characters</option>
-                                    ${playerCampaigns.filter(id => id !== 'default').map(cid => `<option value="${cid}" ${State.campaignId === cid ? 'selected' : ''}>${cid}</option>`).join('')}
-                                    ${State.campaignId && !playerCampaigns.includes(State.campaignId) && State.campaignId !== 'default' ? `<option value="${State.campaignId}" selected>${State.campaignId}</option>` : ''}
-                                    <option value="default" ${State.campaignId === 'default' ? 'selected' : ''}>Solo Play</option>
+                                <span class="text-xs text-amber-800 font-bold">Campaign:</span>
+                                <select id="campaignSwitcher" onchange="onCampaignSelect(this.value)" class="input-fantasy text-xs px-2 py-1" style="min-width:160px">
+                                    <option value="" ${!cid ? 'selected' : ''}>All my characters</option>
+                                    ${Cloud.campaigns.map(c => `<option value="${c.id}" ${cid === c.id ? 'selected' : ''}>${escapeHtml(c.name)}${c.role === 'dm' ? ' (DM)' : c.role === 'admin' ? ' (admin)' : ''}</option>`).join('')}
+                                    <option value="__new">+ Create a campaign…</option>
+                                    <option value="__join">+ Join with invite code…</option>
                                 </select>
-                                ${State.isDM ? `
-                                    <input type="text" id="newCampaignInput" placeholder="New campaign..." class="input-fantasy text-xs px-2 py-1" style="width:100px" onkeydown="if(event.key==='Enter'){createCampaign($('newCampaignInput').value);}">
-                                    <button onclick="createCampaign($('newCampaignInput').value)" class="btn-fantasy px-2 py-1 rounded text-xs" title="Create Campaign"><i class="fas fa-plus"></i></button>
-                                ` : ''}
                             </div>
                             ${State.isDM ? `
                                 <button onclick="changeView('dm_view')" class="btn-fantasy px-4 py-2 rounded text-sm">
     <i class="fas fa-users mr-1"></i>Party View
 </button>
                             ` : ''}
+                            ${inCampaign ? `
                             <button onclick="changeView('campaign')" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-book mr-1"></i>Campaign
                             </button>
                             <button onclick="changeView('tactical')" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-chess-board mr-1"></i>Tactical Map
                             </button>
+                            <button onclick="changeView('users')" class="btn-fantasy px-4 py-2 rounded text-sm">
+                                <i class="fas fa-user-friends mr-1"></i>Players
+                            </button>` : ''}
                             <button onclick="changeView('create')" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-plus mr-1"></i>New Character
                             </button>
-                            <button onclick="restAll()" class="btn-fantasy px-4 py-2 rounded text-sm">
+                            ${State.isDM ? `<button onclick="restAll()" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-bed mr-1"></i>Rest All
-                            </button>
+                            </button>` : ''}
                             <button onclick="exportCampaign()" class="btn-galactic px-4 py-2 rounded text-sm">
                                 <i class="fas fa-download mr-1"></i>Export
                             </button>
-                            <button onclick="importCampaign()" class="btn-galactic px-4 py-2 rounded text-sm">
+                            <button onclick="showImportModal()" class="btn-galactic px-4 py-2 rounded text-sm">
                                 <i class="fas fa-upload mr-1"></i>Import
                             </button>
+                            ${Cloud.isAdmin && !inCampaign ? `<button onclick="changeView('users')" class="btn-galactic px-4 py-2 rounded text-sm">
+                                <i class="fas fa-users-cog mr-1"></i>Users
+                            </button>` : ''}
                             <button onclick="logout()" class="btn-galactic px-4 py-2 rounded text-sm">
                                 <i class="fas fa-sign-out-alt mr-1"></i>Logout
                             </button>
                         </div>
                     </div>
+                    ${invite ? `
+                    <div class="mt-4 p-3 rounded border border-amber-300 bg-amber-50 text-sm text-amber-900 flex flex-wrap items-center gap-2">
+                        <i class="fas fa-ticket-alt text-amber-700"></i>
+                        <span>Invite code: <b class="fantasy-font text-lg tracking-widest">${invite}</b></span>
+                        <button onclick="copyInvite()" class="btn-galactic px-3 py-1 rounded text-xs"><i class="fas fa-link mr-1"></i>Copy invite link</button>
+                        <span class="text-xs text-amber-700">Players open the link (or enter the code) to join this campaign.</span>
+                    </div>` : ''}
+                    ${Cloud.user && Cloud.user.email && !Cloud.user.emailVerified && Cloud.user.providerData.some(p => p.providerId === 'password') ? `
+                    <div class="mt-3 text-xs text-amber-800"><i class="fas fa-envelope mr-1"></i>Please confirm your email address (check your inbox). <button class="underline" onclick="Cloud.user.sendEmailVerification().then(()=>toast('Verification email sent'))">Resend</button></div>` : ''}
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     ${myChars.length === 0 ? `
                         <div class="col-span-full parchment scroll-border p-8 text-center">
                             <i class="fas fa-scroll text-4xl text-amber-700 mb-3"></i>
                             <p class="fantasy-font text-lg text-amber-900">${hasCampaignFilter ? 'No characters in this campaign' : 'No characters found'}</p>
-                            <p class="text-amber-800 text-sm mt-2">${hasCampaignFilter ? 'Switch to All Characters or create a new character.' : 'Create your first character to begin your adventure!'}</p>
+                            <p class="text-amber-800 text-sm mt-2">${hasCampaignFilter ? 'Create a new character for this campaign.' : 'Create your first character, or create/join a campaign from the Campaign menu.'}</p>
                         </div>
                     ` : myChars.map(char => `
                         <div class="parchment scroll-border p-4 cursor-pointer hover:shadow-xl transition-all duration-300 fade-in" 
@@ -115,8 +130,8 @@ function renderDashboard(container) {
                                 <span>Next: ${getNextXP(char.class, char.level || 1)}</span>
                             </div>
                             <div class="mt-2 flex flex-wrap gap-1 items-center">
-                                ${char.campaignId && char.campaignId !== 'default' ? `<span class="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded border border-amber-300"><i class="fas fa-campground mr-1"></i>${char.campaignId}</span>` : ''}
-                                ${State.isDM ? `<span class="text-xs text-amber-600">${char.player}</span>` : ''}
+                                ${char.campaignId && char.campaignId !== 'default' && !inCampaign ? `<span class="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded border border-amber-300"><i class="fas fa-campground mr-1"></i>${escapeHtml(campaignNameById(char.campaignId) || 'Campaign')}</span>` : ''}
+                                ${State.isDM && char.player !== State.currentUser ? `<span class="text-xs text-amber-600"><i class="fas fa-user mr-1"></i>${escapeHtml(char.playerName || memberName(char.player))}</span>` : ''}
                                 ${(char.activeEffects || []).map(e => `<span class="effect-badge text-xs">${e.name}</span>`).join('')}
                                 ${(char.conditions || []).map(c => `<span class="condition-badge text-xs">${c}</span>`).join('')}
                             </div>
@@ -137,97 +152,28 @@ function renderDashboard(container) {
     setTimeout(updateConnectionStatus, 0);
 }
 
-function switchCampaign(campaignId) {
-    const trimmed = campaignId ? campaignId.trim() : null;
-    if (!trimmed) {
-        State.campaignId = null;
-    } else {
-        State.campaignId = trimmed;
-    }
-    Storage.save();
-    if (db && firebaseAuth && State.campaignId) {
-        setupFirebaseListeners();
-    }
-    changeView('dashboard');
-    if (State.campaignId) {
-        toast(`Switched to campaign: ${State.campaignId}`);
-    } else {
-        toast(`Showing all characters.`);
-    }
-}
 
-function createCampaign(name) {
-    if (!name || !name.trim()) return toast('Please enter a campaign name', 'error');
-    const trimmed = name.trim();
-    // Check if already exists
-    const exists = State.characters.some(c => c.campaignId === trimmed);
-    if (exists) {
-        switchCampaign(trimmed);
-        return;
-    }
-    // Create by switching to it
-    State.campaignId = trimmed;
-    rememberCampaign(trimmed);
-    Storage.save();
-    if (db && firebaseAuth) {
-        setupFirebaseListeners();
-    }
-    changeView('dashboard');
-    toast(`Campaign '${trimmed}' created! Create your first character.`);
-}
 
-function exportCampaign() {
-    const data = {
-        characters: State.characters,
-        creatures: State.creatures,
-        customSpells: State.customSpells,
-        campaign: State.campaign,
-        exportedAt: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `adnd_campaign_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Campaign exported!');
-}
 
-function importCampaign() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const data = JSON.parse(event.target.result);
-                if (data.characters) State.characters = data.characters;
-                if (data.creatures) State.creatures = data.creatures;
-                if (data.customSpells) State.customSpells = data.customSpells;
-                if (data.campaign) State.campaign = data.campaign;
-                Storage.save();
-                render();
-                toast('Campaign imported successfully!');
-            } catch (err) {
-                toast('Invalid file format', 'error');
-            }
-        };
-        reader.readAsText(file);
-    };
-    input.click();
-}
 
 function render() { renderDashboard(document.getElementById('app')); }
 
-/* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else {
-    renderDashboard(document.getElementById('app'));
-    setTimeout(updateConnectionStatus, 0);
+function onCampaignSelect(value) {
+    if (value === '__new') {
+        const name = prompt('Name of the new campaign:');
+        if (name) createCampaign(name); else render();
+    } else if (value === '__join') {
+        const code = prompt('Enter the invite code from your DM:');
+        if (code) joinCampaign(code); else render();
+    } else switchCampaign(value);
 }
+
+function copyInvite() {
+    const link = inviteLink(Cloud.meta.inviteCode);
+    const done = () => toast('Invite link copied: send it to your players');
+    if (navigator.clipboard) navigator.clipboard.writeText(link).then(done, () => prompt('Copy this invite link:', link));
+    else prompt('Copy this invite link:', link);
+}
+
+/* Init */
+bootPage({}, () => renderDashboard(document.getElementById('app')));

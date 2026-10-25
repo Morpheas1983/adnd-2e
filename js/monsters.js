@@ -121,11 +121,4 @@ function clearMonsterSearch() {
 function render() { renderMonsters(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.isDM) {
-    changeView('dashboard');
-} else {
-    renderMonsters(document.getElementById('app'));
-}
+bootPage({ campaign: true, dm: true }, () => renderMonsters(document.getElementById('app')));

@@ -32,7 +32,7 @@ function renderCreate(container) {
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-amber-900 mb-1">Player Name</label>
-                                <input type="text" id="charPlayer" class="input-fantasy w-full px-3 py-2" value="${State.currentUser}" readonly>
+                                <input type="text" id="charPlayer" class="input-fantasy w-full px-3 py-2" value="${escapeHtml(State.currentUserName)}" readonly>
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-amber-900 mb-1">Race</label>
@@ -575,10 +575,7 @@ function updateSchoolSphereSelection() {
 function render() { renderCreate(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else {
+bootPage({}, () => {
     renderCreate(document.getElementById('app'));
     setTimeout(() => {
         updateRacePreview();
@@ -587,4 +584,4 @@ if (!State.currentUser) {
         initProficiencySelectors();
         updateCreateHPDisplay();
     }, 0);
-}
+});

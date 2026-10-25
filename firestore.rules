@@ -1,0 +1,144 @@
+rules_version = '2';
+
+// Security rules for the AD&D 2e Character Manager.
+// Paste this into Firebase console > Firestore Database > Rules, then click Publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    // Admin accounts (keep in sync with ADMIN_EMAILS in js/core.js).
+    // Requires a verified email (Google accounts are always verified).
+    function isAdmin() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['billmamakos@gmail.com'];
+    }
+
+    function campaignPath(cid) { return /databases/$(database)/documents/campaigns/$(cid); }
+    function campaignData(cid) { return get(campaignPath(cid)).data; }
+    function roleIn(cid) { return campaignData(cid).members.get(uid(), ''); }
+    function isMember(cid) { return signedIn() && exists(campaignPath(cid)) && roleIn(cid) in ['dm', 'player']; }
+    function isDM(cid) { return signedIn() && exists(campaignPath(cid)) && roleIn(cid) == 'dm'; }
+
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // ---------- user profiles ----------
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isAdmin());
+      allow create, update: if signedIn() && uid() == userId
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'lastLogin']);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- campaigns ----------
+    match /campaigns/{cid} {
+      allow read: if signedIn() && (uid() in resource.data.memberUids || isAdmin());
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == uid()
+        && request.resource.data.members.keys().hasOnly([uid()])
+        && request.resource.data.members[uid()] == 'dm'
+        && request.resource.data.memberUids == [uid()]
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 60
+        && request.resource.data.inviteCode is string;
+
+      allow update: if signedIn() && (
+        // The DM (or admin) can change anything except who owns the campaign
+        ((resource.data.members.get(uid(), '') == 'dm' || isAdmin())
+          && request.resource.data.ownerUid == resource.data.ownerUid
+          // the owner always stays a DM
+          && request.resource.data.members.get(resource.data.ownerUid, '') == 'dm')
+
+        // Players can edit the shared party notes and their own personal notes
+        || (resource.data.members.get(uid(), '') == 'player'
+          && changed().hasOnly(['partyNotes', 'playerNotes', 'updatedAt'])
+          && request.resource.data.get('playerNotes', {}).diff(resource.data.get('playerNotes', {})).affectedKeys().hasOnly([uid()]))
+
+        // Joining with the invite code: add only yourself, as a player
+        || (!(uid() in resource.data.members)
+          && changed().hasOnly(['members', 'memberUids', 'memberNames', 'joinCode'])
+          && request.resource.data.joinCode == resource.data.inviteCode
+          && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([uid()])
+          && request.resource.data.members[uid()] == 'player'
+          && request.resource.data.memberUids.toSet() == resource.data.memberUids.toSet().union([uid()].toSet())
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([uid()]))
+
+        // Leaving: remove only yourself (the owner can't leave)
+        || (uid() in resource.data.members && uid() != resource.data.ownerUid
+          && changed().hasOnly(['members', 'memberUids', 'memberNames'])
+          && !(uid() in request.resource.data.members)
+          && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([uid()])
+          && request.resource.data.memberUids.toSet() == resource.data.memberUids.toSet().difference([uid()].toSet()))
+      );
+
+      allow delete: if signedIn() && (resource.data.ownerUid == uid() || isAdmin());
+
+      // DM-only secret notes
+      match /private/{docId} {
+        allow read, write: if isDM(cid) || isAdmin();
+      }
+
+      // Shared campaign state
+      match /state/{docId} {
+        allow read: if isMember(cid) || isAdmin();
+        // creatures & custom spells: DM only. Tactical map: every member (players move their tokens)
+        allow write: if isDM(cid) || isAdmin() || (docId == 'map' && isMember(cid));
+      }
+    }
+
+    // ---------- invite codes ----------
+    match /invites/{code} {
+      // Look up a single code (no listing of all codes)
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && getAfter(campaignPath(request.resource.data.campaignId)).data.members.get(uid(), '') == 'dm';
+      allow delete: if signedIn() && (isDM(resource.data.campaignId) || isAdmin()
+        || !exists(campaignPath(resource.data.campaignId))
+        || get(campaignPath(resource.data.campaignId)).data.ownerUid == uid());
+      allow update: if false;
+    }
+
+    // ---------- characters ----------
+    match /characters/{charId} {
+      function inCampaign(data) { return data.campaignId is string; }
+
+      allow read: if signedIn() && (
+        resource.data.ownerUid == uid()
+        || isAdmin()
+        || (inCampaign(resource.data) && isMember(resource.data.campaignId)));
+
+      allow create: if signedIn()
+        && (isAdmin()
+          || (request.resource.data.ownerUid == uid()
+            && (!inCampaign(request.resource.data) || isMember(request.resource.data.campaignId)))
+          || (inCampaign(request.resource.data) && isDM(request.resource.data.campaignId)
+            && request.resource.data.ownerUid in campaignData(request.resource.data.campaignId).members));
+
+      allow update: if signedIn() && (
+        isAdmin()
+        // The owner: may move it to a campaign they belong to (or to solo) and keeps or gives away ownership within it
+        || (resource.data.ownerUid == uid()
+          && (!inCampaign(request.resource.data) || isMember(request.resource.data.campaignId))
+          && (request.resource.data.ownerUid == uid()
+            || (inCampaign(request.resource.data) && request.resource.data.ownerUid in campaignData(request.resource.data.campaignId).members)))
+        // The campaign's DM: may edit it and give it to another member, but not move it out
+        || (inCampaign(resource.data) && isDM(resource.data.campaignId)
+          && request.resource.data.campaignId == resource.data.campaignId
+          && request.resource.data.ownerUid in campaignData(resource.data.campaignId).members)
+        // Campaign deleted by its owner: characters become solo
+        || (inCampaign(resource.data) && !existsAfter(campaignPath(resource.data.campaignId))
+          && changed().hasOnly(['campaignId']) && request.resource.data.campaignId == null)
+      );
+
+      allow delete: if signedIn() && (
+        resource.data.ownerUid == uid()
+        || isAdmin()
+        || (inCampaign(resource.data) && isDM(resource.data.campaignId)));
+    }
+  }
+}

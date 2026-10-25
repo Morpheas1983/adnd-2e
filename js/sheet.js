@@ -131,17 +131,17 @@ function renderSheet(container) {
                             <div>
                                 <h1 class="fantasy-font text-2xl font-bold text-amber-900">${char.name}</h1>
                                 <p class="text-sm text-amber-800">${char.race} ${char.kit !== 'None' ? char.kit : char.class} • ${char.alignment} • Level ${char.level}</p>
-                                ${char.campaignId && char.campaignId !== 'default' ? `<p class="text-xs text-amber-700 mt-1"><i class="fas fa-campground mr-1"></i>Campaign: <span class="font-bold text-amber-900">${char.campaignId}</span> <button onclick="switchCampaign('${char.campaignId}'); changeView('dashboard');" class="text-blue-700 hover:text-blue-900 underline ml-1 cursor-pointer">Switch to this campaign</button></p>` : '<p class="text-xs text-amber-700 mt-1">Not assigned to a campaign</p>'}
+                                ${char.campaignId && char.campaignId !== 'default' ? `<p class="text-xs text-amber-700 mt-1"><i class="fas fa-campground mr-1"></i>Campaign: <span class="font-bold text-amber-900">${escapeHtml(campaignNameById(char.campaignId) || 'Campaign')}</span>${char.campaignId !== State.campaignId && Cloud.campaigns.some(c => c.id === char.campaignId) ? ` <button onclick="switchCampaign('${char.campaignId}')" class="text-blue-700 hover:text-blue-900 underline ml-1 cursor-pointer">Switch to this campaign</button>` : ''}</p>` : '<p class="text-xs text-amber-700 mt-1">Solo character (not in a campaign)</p>'}
+                            ${char.player === State.currentUser ? `
                             <div class="mt-2 flex items-center gap-2">
                                 <span class="text-xs text-amber-800">Move to:</span>
-                                <select id="moveCampaign" class="input-fantasy text-xs px-2 py-1" style="min-width:120px">
+                                <select id="moveCampaign" class="input-fantasy text-xs px-2 py-1" style="min-width:140px">
                                     <option value="">-- Select --</option>
-                                    <option value="default">Solo Play</option>
-                                    ${[...new Set(State.characters.map(c => c.campaignId).filter(Boolean))].filter(id => id !== 'default' && id !== char.campaignId).map(cid => `<option value="${cid}">${cid}</option>`).join('')}
+                                    ${char.campaignId && char.campaignId !== 'default' ? '<option value="default">Solo (no campaign)</option>' : ''}
+                                    ${Cloud.campaigns.filter(c => c.role && c.role !== 'admin' && c.id !== char.campaignId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
                                 </select>
-                                <input type="text" id="newCampaignMove" placeholder="New..." class="input-fantasy text-xs px-2 py-1" style="width:80px" onkeydown="if(event.key==='Enter'){changeCharacterCampaign('${char.id}', this.value);this.value='';}">
-                                <button onclick="changeCharacterCampaign('${char.id}', $('moveCampaign').value || $('newCampaignMove').value)" class="btn-fantasy px-2 py-1 rounded text-xs" title="Move"><i class="fas fa-exchange-alt"></i></button>
-                            </div>
+                                <button onclick="changeCharacterCampaign('${char.id}', $('moveCampaign').value)" class="btn-fantasy px-2 py-1 rounded text-xs" title="Move"><i class="fas fa-exchange-alt"></i></button>
+                            </div>` : `<p class="text-xs text-amber-700 mt-1"><i class="fas fa-user mr-1"></i>Player: ${escapeHtml(char.playerName || memberName(char.player))}</p>`}
                             </div>
                         </div>
                         <div class="flex gap-2 flex-wrap">
@@ -587,15 +587,12 @@ function removeProfFromModal(type, idx) {
 }
 
 function changeCharacterCampaign(charId, newCampaignId) {
-    if (!newCampaignId || !newCampaignId.trim()) return toast('Please enter or select a campaign', 'error');
+    if (!newCampaignId) return toast('Please select a campaign', 'error');
     const char = State.characters.find(c => c.id === charId);
     if (!char) return toast('Character not found', 'error');
-    const oldCampaign = char.campaignId || 'default';
-    const newCampaign = newCampaignId.trim();
-    char.campaignId = newCampaign;
-    char.lastUpdated = Date.now();
+    char.campaignId = newCampaignId;
     Storage.save();
-    toast(`${char.name} moved from ${oldCampaign} to ${newCampaign}`);
+    toast(`${char.name} moved to ${newCampaignId === 'default' ? 'Solo play' : campaignNameById(newCampaignId)}`);
     render();
 }
 
@@ -652,11 +649,4 @@ function activateKitMechanic() {
 function render() { renderSheet(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.currentCharacter) {
-    changeView('dashboard');
-} else {
-    renderSheet(document.getElementById('app'));
-}
+bootPage({ character: true }, () => renderSheet(document.getElementById('app')));

@@ -425,7 +425,7 @@ function restById(id) {
 }
 
 function restAll() {
-    State.characters.forEach(char => {
+    State.characters.filter(c => !State.campaignId || c.campaignId === State.campaignId).filter(canWriteChar).forEach(char => {
         char.hp = char.maxHp;
         char.usedSpellSlots = {};
         char.activeEffects = [];
@@ -803,32 +803,7 @@ function getMonsterSavesByHD(level) {
     return "2/4/3/5/5";
 }
 
-function hashPassword(password) {
-    // Simple consistent hash - not cryptographically secure but works for this app
-    let hash = 0;
-    for (let i = 0; i < password.length; i++) {
-        const char = password.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    // Make it look like a hash and be consistent
-    const hashStr = Math.abs(hash).toString(16).padStart(8, '0');
-    // Double-hash for more entropy
-    let hash2 = 0;
-    for (let i = 0; i < hashStr.length; i++) {
-        hash2 = ((hash2 << 5) - hash2) + hashStr.charCodeAt(i);
-        hash2 = hash2 & hash2;
-    }
-    return hashStr + Math.abs(hash2).toString(16).padStart(8, '0');
-}
 
-function verifyCredentials(username, password) {
-    const user = (DB.users || []).find(u => u.username === username);
-    if (!user) return null;
-    const hash = hashPassword(password);
-    if (user.passwordHash === hash) return user;
-    return null;
-}
 
 function isDM() {
     return State.isDM === true;
@@ -846,49 +821,8 @@ function getCurrentUserName() {
     return State.currentUserName || State.currentUser || 'Guest';
 }
 
-function createUser(username, password, role, name) {
-    if (!username || !password) return { success: false, message: 'Username and password required' };
-    if ((DB.users || []).find(u => u.username === username)) {
-        return { success: false, message: 'Username already exists' };
-    }
-    if (!['dm', 'player'].includes(role)) {
-        return { success: false, message: 'Role must be dm or player' };
-    }
-    const user = {
-        username: username,
-        passwordHash: hashPassword(password),
-        role: role,
-        name: name || username,
-        updatedAt: Date.now()
-    };
-    DB.users = DB.users || [];
-    DB.users.push(user);
-    
-    localStorage.setItem('adnd2e_users', JSON.stringify(DB.users));
-    // A re-created user must not stay hidden by an old deletion record
-    const deleted = loadDeletedUsers(); delete deleted[fbKey(username)];
-    localStorage.setItem('adnd2e_deletedUsers', JSON.stringify(deleted));
-    pushAccounts();
-    
-    return { success: true, message: `User ${username} created successfully` };
-}
 
-function deleteUser(username) {
-    const idx = (DB.users || []).findIndex(u => u.username === username);
-    if (idx === -1) return { success: false, message: 'User not found' };
-    DB.users.splice(idx, 1);
-    
-    localStorage.setItem('adnd2e_users', JSON.stringify(DB.users));
-    const deleted = loadDeletedUsers(); deleted[fbKey(username)] = Date.now();
-    localStorage.setItem('adnd2e_deletedUsers', JSON.stringify(deleted));
-    pushAccounts();
-    
-    return { success: true, message: `User ${username} deleted` };
-}
 
-function listUsers() {
-    return (DB.users || []).map(u => ({ username: u.username, role: u.role, name: u.name }));
-}
 
 function isDM() {
     return State.isDM === true;
@@ -954,8 +888,10 @@ const VIEW_MAP = {
 
 function changeView(view) {
     const target = VIEW_MAP[view];
-    if (target) window.location.href = target;
-    else console.warn('Unknown view:', view);
+    if (!target) return console.warn('Unknown view:', view);
+    // Give recent saves a moment to reach the local database before leaving the page
+    const pending = (typeof Cloud !== 'undefined' && Cloud.pending) ? Cloud.pending : Promise.resolve();
+    Promise.race([pending, new Promise(r => setTimeout(r, 2500))]).then(() => { window.location.href = target; });
 }
 
 function goBack() {
@@ -980,19 +916,6 @@ function requireDM() {
     return true;
 }
 
-function initApp() {
-    try {
-        const savedUsers = localStorage.getItem('adnd2e_users');
-        if (savedUsers) {
-            try { DB.users = JSON.parse(savedUsers); } catch(e) {}
-        }
-        Storage.load();
-        Sync.init();
-        initFirebase();
-    } catch (err) {
-        console.error('App initialization error:', err);
-    }
-}
 
 function toast(msg, type='success') {
     const div = document.createElement('div');
@@ -1002,26 +925,13 @@ function toast(msg, type='success') {
     setTimeout(() => div.remove(), 3000);
 }
 
-function logout() {
-    firebaseListeners.forEach(ref => ref.off());
-    firebaseListeners = [];
-    State.currentUser = null;
-    State.currentUserName = null;
-    State.isDM = false;
-    State.currentCharacter = null;
-    localStorage.removeItem('adnd2e_currentUser');
-    localStorage.removeItem('adnd2e_currentUserName');
-    localStorage.removeItem('adnd2e_isDM');
-    localStorage.removeItem('adnd2e_currentCharacter');
-    changeView('login');
-}
 
 function loadCharacter(id) {
     const char = State.characters.find(c => c.id === id);
     if (!char) return;
-    if (!State.isDM && char.player !== State.currentUser) return toast('Access denied', 'error');
+    if (!canWriteChar(char)) return toast('Only the owner or the DM can open this character', 'error');
     State.currentCharacter = char;
-	Storage.save();
+    Storage.savePrefs();
     changeView('sheet');
 }
 
@@ -1029,80 +939,6 @@ function dmViewCharacter(id) {
     loadCharacter(id);
 }
 
-function switchCampaign(campaignId) {
-    const trimmed = campaignId ? campaignId.trim() : null;
-    State.campaignId = trimmed || null;
-    Storage.save();
-    if (db && firebaseAuth && State.campaignId) {
-        setupFirebaseListeners();
-    }
-    changeView('dashboard');
-    if (State.campaignId) {
-        toast(`Switched to campaign: ${State.campaignId}`);
-    } else {
-        toast(`Showing all characters.`);
-    }
-}
 
-function createCampaign(name) {
-    if (!name || !name.trim()) return toast('Please enter a campaign name', 'error');
-    const trimmed = name.trim();
-    const exists = State.characters.some(c => c.campaignId === trimmed);
-    if (exists) {
-        switchCampaign(trimmed);
-        return;
-    }
-    State.campaignId = trimmed;
-    rememberCampaign(trimmed);
-    Storage.save();
-    if (db && firebaseAuth) {
-        setupFirebaseListeners();
-    }
-    changeView('dashboard');
-    toast(`Campaign '${trimmed}' created! Create your first character.`);
-}
 
-function exportCampaign() {
-    const data = {
-        characters: State.characters,
-        creatures: State.creatures,
-        customSpells: State.customSpells,
-        campaign: State.campaign,
-        exportedAt: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `adnd_campaign_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Campaign exported!');
-}
 
-function importCampaign() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            try {
-                const data = JSON.parse(event.target.result);
-                if (data.characters) State.characters = data.characters;
-                if (data.creatures) State.creatures = data.creatures;
-                if (data.customSpells) State.customSpells = data.customSpells;
-                if (data.campaign) State.campaign = data.campaign;
-                Storage.save();
-                toast('Campaign imported successfully!');
-                changeView('dashboard');
-            } catch (err) {
-                toast('Invalid file format', 'error');
-            }
-        };
-        reader.readAsText(file);
-    };
-    input.click();
-}

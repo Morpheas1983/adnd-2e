@@ -218,11 +218,4 @@ function removeItem(idx) {
 function render() { renderInventory(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.currentCharacter) {
-    changeView('dashboard');
-} else {
-    renderInventory(document.getElementById('app'));
-}
+bootPage({ character: true }, () => renderInventory(document.getElementById('app')));

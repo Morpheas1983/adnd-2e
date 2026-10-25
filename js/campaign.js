@@ -228,10 +228,4 @@ function deleteSession(idx) {
 function render() { renderCampaign(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else {
-    renderCampaign(document.getElementById('app'));
-    setTimeout(updateConnectionStatus, 0);
-}
+bootPage({ campaign: true }, () => renderCampaign(document.getElementById('app')));

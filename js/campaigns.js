@@ -114,11 +114,4 @@ function selectCampaign(code) {
 function render() { renderCampaigns(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.isDM) {
-    changeView('dashboard');
-} else {
-    renderCampaigns(document.getElementById('app'));
-}
+bootPage({ campaign: true, dm: true }, () => renderCampaigns(document.getElementById('app')));

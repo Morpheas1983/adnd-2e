@@ -314,11 +314,4 @@ function saveCustomSpell() {
 function render() { renderSpells(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else if (!State.currentCharacter) {
-    changeView('dashboard');
-} else {
-    renderSpells(document.getElementById('app'));
-}
+bootPage({ character: true }, () => renderSpells(document.getElementById('app')));

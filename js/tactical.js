@@ -492,15 +492,10 @@ function setActiveMap(id) {
     }
     Storage.save();
     toast(`Active map: ${map?.name || 'Unknown'}`);
-    if (State.view === 'tactical') drawTacticalMap();
+    if (currentPage() === 'tactical') drawTacticalMap();
 }
 
 function render() { renderTacticalMap(document.getElementById('app')); }
 
 /* Init */
-initApp();
-if (!State.currentUser) {
-    changeView('login');
-} else {
-    renderTacticalMap(document.getElementById('app'));
-}
+bootPage({ campaign: true }, () => renderTacticalMap(document.getElementById('app')));
