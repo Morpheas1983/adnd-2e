@@ -119,7 +119,9 @@ const Cloud_start = async function () {
     window.addEventListener('offline', () => { firebaseConnected = false; updateConnectionStatus(); });
     firebaseConnected = navigator.onLine !== false;
 
-    const user = await waitForAuth();
+    let user = await waitForAuth();
+    // The old version signed everyone in anonymously; that is not a real account, so sign it out
+    if (user && user.isAnonymous) { try { await auth.signOut(); } catch (e) {} user = null; }
     if (!user) { State.currentUser = null; Cloud.ready = true; return; }
 
     Cloud.user = user;
@@ -226,6 +228,7 @@ function rebuildCharacters() {
     // Keep local characters that haven't been uploaded yet (just created, or offline)
     const pending = (State.characters || []).filter(c => !all[c.id] && c._pending);
     State.characters = [...Object.values(all), ...pending];
+    if (typeof registerAllCustomProfs === 'function') registerAllCustomProfs();
 }
 function restoreCurrentCharacter() {
     const id = State.currentCharacter ? State.currentCharacter.id : localStorage.getItem('adnd2e_currentCharacter');
@@ -271,7 +274,9 @@ function subscribeCampaign(cid) {
             const x = doc.exists ? doc.data() : {};
             State.creatures = parseJson(x.creaturesJson, []);
             State.customSpells = parseJson(x.customSpellsJson, { wizard: [], priest: [] });
-            Cloud.synced.shared = JSON.stringify({ creatures: State.creatures, customSpells: State.customSpells });
+            State.customProfs = parseJson(x.customProfsJson, { weapon: [], nonweapon: [] });
+            if (typeof registerAllCustomProfs === 'function') registerAllCustomProfs();
+            Cloud.synced.shared = JSON.stringify({ creatures: State.creatures, customSpells: State.customSpells, customProfs: State.customProfs });
             if (first) { first = false; resolve(); } else if (['dm', 'bestiary', 'monsters', 'tactical'].includes(currentPage())) safeRender();
         }, err => { console.error('Shared state error', err); resolve(); }));
     }));
@@ -390,9 +395,9 @@ function syncToCloud() {
             Cloud.synced.dmNotes = c.dmNotes || '';
             writes++;
         }
-        const shared = JSON.stringify({ creatures: State.creatures || [], customSpells: State.customSpells || { wizard: [], priest: [] } });
+        const shared = JSON.stringify({ creatures: State.creatures || [], customSpells: State.customSpells || { wizard: [], priest: [] }, customProfs: State.customProfs || { weapon: [], nonweapon: [] } });
         if (State.isDM && shared !== Cloud.synced.shared) {
-            batch.set(base.collection('state').doc('shared'), { creaturesJson: JSON.stringify(State.creatures || []), customSpellsJson: JSON.stringify(State.customSpells || { wizard: [], priest: [] }) });
+            batch.set(base.collection('state').doc('shared'), { creaturesJson: JSON.stringify(State.creatures || []), customSpellsJson: JSON.stringify(State.customSpells || { wizard: [], priest: [] }), customProfsJson: JSON.stringify(State.customProfs || { weapon: [], nonweapon: [] }) });
             Cloud.synced.shared = shared;
             writes++;
         }

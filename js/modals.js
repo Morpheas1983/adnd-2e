@@ -473,7 +473,7 @@ function showEditLevelModal() {
     `;
 }
 
-function showManageProfsModal() {
+function showManageProfsModal(openNew) {
     const char = State.currentCharacter;
     if (!char) return;
     $('modalContainer').innerHTML = `
@@ -496,10 +496,11 @@ function showManageProfsModal() {
     const el = $('manageProfPicker');
     el._before = before;
     ProfPicker.mount(el, {
-        className: char.class, level: char.level, intScore: char.stats?.int || 10,
+        className: char.class, level: char.level, intScore: char.stats?.int || 10, charId: char.id,
         selectedWP: char.weaponProfs || [], selectedSpecs: char.weaponSpecs || [], selectedNWP: char.nonweaponProfs || [],
         onChange: updateManageProfMsg
     });
+    if (openNew === 'weapon' || openNew === 'nonweapon') ProfPicker.openForm(el, openNew);
     updateManageProfMsg();
 }
 
@@ -914,6 +915,7 @@ function saveManagedProfs() {
     char.weaponProfs = v.weaponProfs;
     char.weaponSpecs = canSpecialize(char.class) ? v.weaponSpecs : [];
     char.nonweaponProfs = v.nonweaponProfs;
+    saveNewCustomProfs(char, v.customs);
     Storage.save();
     closeModal();
     render();

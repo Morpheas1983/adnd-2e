@@ -431,34 +431,8 @@ function renderSheet(container) {
                                 PPDM = Paralyze/Poison/Death Magic | RSW = Rod/Staff/Wand | PP = Petrification/Polymorph | BW = Breath Weapon | SP = Spell
                             </div>
                         </div>
-                        <div class="parchment scroll-border p-4 fade-in">
-                            <div class="section-header justify-between"><span><i class="fas fa-fist-raised mr-2"></i>Proficiencies</span>
-                                ${canWriteChar(char) ? `<button onclick="showManageProfsModal()" class="btn-galactic px-2 py-1 rounded text-xs normal-case"><i class="fas fa-edit mr-1"></i>Manage</button>` : ''}</div>
-                            <div class="grid-2 gap-4">
-                                <div>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <h4 class="font-bold text-amber-900 text-sm">Weapon Profs</h4>
-                                        <span class="text-xs ${profSum.weapon.left < 0 ? 'text-red-600' : (profSum.weapon.left > 0 ? 'text-amber-600' : 'text-green-600')}">${profSum.weapon.used} / ${profSum.weapon.total} slots${profSum.weapon.left > 0 ? ` (${profSum.weapon.left} free)` : ''}</span>
-                                    </div>
-                                    <div class="flex flex-wrap gap-1">
-                                        ${(char.weaponProfs || []).map(p => `<span class="prof-tag">${p}${(char.weaponSpecs || []).includes(p) && canSpecialize(char.class) ? ' <i class="fas fa-star text-amber-600" title="Specialized: +1 hit, +2 dmg"></i>' : ''}</span>`).join('') || '<span class="text-amber-700 text-sm italic">None selected</span>'}
-                                    </div>
-                                    <p class="text-xs text-amber-700 mt-2">Non-proficient weapons: ${profSum.penalty} to hit</p>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-2">
-                                        <h4 class="font-bold text-amber-900 text-sm">Non-Weapon Profs</h4>
-                                        <span class="text-xs ${profSum.nonweapon.left < 0 ? 'text-red-600' : (profSum.nonweapon.left > 0 ? 'text-amber-600' : 'text-green-600')}">${profSum.nonweapon.used} / ${profSum.nonweapon.total} slots${profSum.nonweapon.left > 0 ? ` (${profSum.nonweapon.left} free)` : ''}</span>
-                                    </div>
-                                    <div class="space-y-1">
-                                        ${(char.nonweaponProfs || []).map(p => { const info = nwpInfo(p); const sc = nwpCheckScore(char, p); return `
-                                        <div class="flex items-center justify-between gap-2 text-sm bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                                            <span class="text-amber-900">${p} <span class="text-xs text-amber-700">${info.ability !== 'N/A' ? `${info.ability}${formatMod(info.mod)}` : ''}</span></span>
-                                            ${sc === null ? '<span class="text-xs text-amber-700">no roll</span>' : `<button onclick="rollProficiencyCheck('${p.replace(/'/g, "\\'")}')" class="text-xs px-2 py-0.5 rounded bg-amber-700 text-amber-50 whitespace-nowrap" title="Roll d20, succeed on ${sc} or less"><i class="fas fa-dice-d20 mr-1"></i>${sc}</button>`}
-                                        </div>`; }).join('') || '<span class="text-amber-700 text-sm italic">None selected</span>'}
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="parchment scroll-border p-4 fade-in" id="profPanel">
+                            ${renderProfPanel(char, profSum)}
                         </div>
                         ${char.class === 'Thief' || char.class === 'Bard' ? `
                         <div class="parchment scroll-border p-4 fade-in">
@@ -640,3 +614,76 @@ function render() { renderSheet(document.getElementById('app')); }
 
 /* Init */
 bootPage({ character: true }, () => renderSheet(document.getElementById('app')));
+
+/* ---------- Proficiencies panel on the character sheet ---------- */
+function uriArg(s) { return encodeURIComponent(s).replace(/'/g, '%27'); }
+function renderProfPanel(char, profSum) {
+    const edit = canWriteChar(char);
+    const equipped = (char.inventory || []).filter(i => i.equipped && i.type === 'weapon');
+    const chip = (label, x) => `<span class="text-xs px-2 py-1 rounded border ${x.left < 0 ? 'bg-red-100 text-red-800 border-red-300' : x.left > 0 ? 'bg-amber-100 text-amber-900 border-amber-400' : 'bg-green-100 text-green-800 border-green-300'}">${label}: <b>${x.used}/${x.total}</b> slots</span>`;
+    const free = [profSum.weapon.left > 0 ? `${profSum.weapon.left} weapon` : '', profSum.nonweapon.left > 0 ? `${profSum.nonweapon.left} non-weapon` : ''].filter(Boolean).join(' and ');
+    const wps = char.weaponProfs || [];
+    const nwps = char.nonweaponProfs || [];
+    const unarmedUse = equipped.filter(w => !wps.includes(weaponProfFor(w)));
+    return `
+        <div class="section-header justify-between flex-wrap gap-2">
+            <span><i class="fas fa-fist-raised mr-2"></i>Proficiencies</span>
+            <span class="flex gap-2 flex-wrap normal-case">
+                ${chip('Weapon', profSum.weapon)} ${chip('Non-weapon', profSum.nonweapon)}
+            </span>
+        </div>
+        ${edit ? `<div class="flex flex-wrap gap-2 mb-3">
+            <button onclick="showManageProfsModal()" class="btn-fantasy px-3 py-1 rounded text-xs"><i class="fas fa-plus mr-1"></i>Add / change</button>
+            <button onclick="showManageProfsModal('nonweapon')" class="btn-galactic px-3 py-1 rounded text-xs"><i class="fas fa-pen-fancy mr-1"></i>Create new proficiency</button>
+        </div>` : ''}
+        ${free && edit ? `<div class="mb-3 p-2 rounded bg-amber-100 border border-amber-400 text-sm text-amber-900"><i class="fas fa-info-circle mr-1"></i>You have ${free} slot(s) free. Use <b>Add / change</b> to learn new proficiencies.</div>` : ''}
+        ${profSum.weapon.left < 0 || profSum.nonweapon.left < 0 ? `<div class="mb-3 p-2 rounded bg-red-50 border border-red-300 text-sm text-red-800"><i class="fas fa-exclamation-triangle mr-1"></i>More proficiencies than slots${canOverrideProfLimits() ? ' (allowed because you are the DM)' : ': ask your DM'}.</div>` : ''}
+        <div class="grid-2 gap-4">
+            <div>
+                <h4 class="font-bold text-amber-900 text-sm mb-2"><i class="fas fa-khanda mr-1"></i>Weapon proficiencies</h4>
+                <div class="space-y-1">
+                    ${wps.map(p => {
+                        const spec = (char.weaponSpecs || []).includes(p) && canSpecialize(char.class);
+                        const using = equipped.filter(w => weaponProfFor(w) === p).map(w => w.name);
+                        return `<div class="flex items-center justify-between gap-2 text-sm bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            <span class="text-amber-900"><b>${escapeHtml(p)}</b>${isCustomProf('weapon', p) ? ' <span class="text-[10px] px-1 rounded bg-purple-100 text-purple-800 border border-purple-300">custom</span>' : ''}
+                                ${spec ? '<span class="text-xs item-bonus ml-1"><i class="fas fa-star"></i> Specialized +1 hit / +2 dmg</span>' : ''}
+                                ${using.length ? `<div class="text-xs text-green-800"><i class="fas fa-check mr-1"></i>${using.map(escapeHtml).join(', ')} equipped</div>` : ''}</span>
+                            ${edit ? `<button onclick="removeProf('weapon', decodeURIComponent('${uriArg(p)}'))" class="text-red-700 hover:text-red-900 px-1" title="Forget this proficiency"><i class="fas fa-times"></i></button>` : ''}
+                        </div>`; }).join('') || '<p class="text-sm italic text-amber-700">None yet</p>'}
+                </div>
+                <p class="text-xs mt-2 ${unarmedUse.length ? 'text-red-700 font-bold' : 'text-amber-700'}">${unarmedUse.length ? `<i class="fas fa-exclamation-triangle mr-1"></i>Not proficient with ${unarmedUse.map(w => escapeHtml(w.name)).join(', ')}: ${profSum.penalty} to hit` : `Weapons without proficiency: ${profSum.penalty} to hit`}</p>
+            </div>
+            <div>
+                <h4 class="font-bold text-amber-900 text-sm mb-2"><i class="fas fa-tools mr-1"></i>Non-weapon proficiencies</h4>
+                <div class="space-y-1">
+                    ${nwps.map(p => { const info = nwpInfo(p); const sc = nwpCheckScore(char, p); const cost = nwpCost(char.class, p); return `
+                    <div class="flex items-center justify-between gap-2 text-sm bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        <span class="text-amber-900"><b>${escapeHtml(p)}</b>${isCustomProf('nonweapon', p) ? ' <span class="text-[10px] px-1 rounded bg-purple-100 text-purple-800 border border-purple-300">custom</span>' : ''}
+                            <div class="text-xs text-amber-700">${info.ability !== 'N/A' ? `${info.ability} ${getModifiedStat(char, info.ability.toLowerCase())} ${formatMod(info.mod)}` : 'No roll needed'} · ${cost === 0 ? 'free' : cost + ' slot' + (cost > 1 ? 's' : '')}</div></span>
+                        <span class="flex items-center gap-1">
+                            ${sc === null ? '' : `<button onclick="rollProficiencyCheck(decodeURIComponent('${uriArg(p)}'))" class="text-xs px-2 py-1 rounded bg-amber-700 text-amber-50 whitespace-nowrap" title="Roll d20: succeed on ${sc} or less"><i class="fas fa-dice-d20 mr-1"></i>${sc}</button>`}
+                            ${edit ? `<button onclick="removeProf('nonweapon', decodeURIComponent('${uriArg(p)}'))" class="text-red-700 hover:text-red-900 px-1" title="Forget this proficiency"><i class="fas fa-times"></i></button>` : ''}
+                        </span>
+                    </div>`; }).join('') || '<p class="text-sm italic text-amber-700">None yet</p>'}
+                </div>
+                <p class="text-xs text-amber-700 mt-2">Check: roll d20, equal or under the number succeeds (20 always fails).</p>
+            </div>
+        </div>`;
+}
+
+function removeProf(kind, name) {
+    const char = State.currentCharacter;
+    if (!char || !canWriteChar(char)) return;
+    if ((FREE_NWP[char.class] || []).includes(name)) return toast(`${name} is a free class proficiency`, 'error');
+    if (!confirm(`Forget the proficiency "${name}"? The slot becomes free again.`)) return;
+    if (kind === 'weapon') {
+        char.weaponProfs = (char.weaponProfs || []).filter(p => p !== name);
+        char.weaponSpecs = (char.weaponSpecs || []).filter(p => p !== name);
+    } else {
+        char.nonweaponProfs = (char.nonweaponProfs || []).filter(p => p !== name);
+    }
+    Storage.save();
+    render();
+    toast(`${name} removed`);
+}

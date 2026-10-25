@@ -506,7 +506,7 @@ function finishCreation() {
     const maxHp = parseInt($('createHP').value) || 1;
     const profProblem = profStepProblem();
     if (profProblem) return toast('Proficiencies: ' + profProblem, 'error');
-    const { weaponProfs, weaponSpecs, nonweaponProfs } = ProfPicker.value($('profPicker'));
+    const { weaponProfs, weaponSpecs, nonweaponProfs, customs } = ProfPicker.value($('profPicker'));
     const selectedSchools = Array.from(document.querySelectorAll('input[name="wizardSchool"]:checked')).map(cb => cb.value);
     const selectedSpheres = Array.from(document.querySelectorAll('input[name="priestSphere"]:checked')).map(cb => cb.value);
 
@@ -529,6 +529,7 @@ function finishCreation() {
     if (cls === 'Thief' || cls === 'Bard') {
         DB.thieving_skills.forEach(s => char.thiefSkills[s.name] = s.base);
     }
+    saveNewCustomProfs(char, customs);
     State.characters.push(char);
     Storage.save();
     tempInventory = [];

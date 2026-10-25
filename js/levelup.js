@@ -88,7 +88,7 @@ function mountLevelProfPicker() {
     const el = $('levelProfPicker');
     if (!el || !char) return;
     ProfPicker.mount(el, {
-        className: char.class, level: (char.level || 1) + 1, intScore: char.stats?.int || 10,
+        className: char.class, level: (char.level || 1) + 1, intScore: char.stats?.int || 10, charId: char.id,
         lockedWP: char.weaponProfs || [], lockedSpecs: char.weaponSpecs || [], lockedNWP: char.nonweaponProfs || []
     });
 }
@@ -116,6 +116,7 @@ function confirmLevelUp() {
         char.weaponProfs = v.weaponProfs;
         char.weaponSpecs = canSpecialize(char.class) ? v.weaponSpecs : (char.weaponSpecs || []);
         char.nonweaponProfs = v.nonweaponProfs;
+        saveNewCustomProfs(char, v.customs);
     }
     if (char.class === 'Thief' || char.class === 'Bard') {
         DB.thieving_skills.forEach(s => {
