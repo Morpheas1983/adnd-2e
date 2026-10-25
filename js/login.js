@@ -1,7 +1,7 @@
 /* login.js - Login View */
 function renderLogin(container) {
     const chars = State.characters || [];
-    const allCampaigns = [...new Set(chars.map(c => c.campaignId).filter(Boolean))].filter(id => id !== 'default').sort();
+    const allCampaigns = getKnownCampaigns();
     container.innerHTML = `
         <div class="min-h-screen flex items-center justify-center p-4">
             <div class="parchment scroll-border p-8 max-w-md w-full text-center fade-in">
@@ -55,7 +55,9 @@ function renderLogin(container) {
     `;
 }
 
-function login(requestedRole) {
+let loginInProgress = false;
+async function login(requestedRole) {
+    if (loginInProgress) return;
     // Ensure users are loaded from localStorage before checking credentials
     const savedUsers = localStorage.getItem('adnd2e_users');
     if (savedUsers) {
@@ -68,6 +70,16 @@ function login(requestedRole) {
 
     if (!username) return toast('Please enter your username', 'error');
     if (!password) return toast('Please enter your password', 'error');
+
+    // Fetch the shared user accounts from Firebase, so accounts created on another
+    // device (e.g. desktop) also work here (e.g. on a phone)
+    loginInProgress = true;
+    const buttons = document.querySelectorAll('#app button');
+    buttons.forEach(b => b.disabled = true);
+    try { await ensureAccountsLoaded(6000); } finally {
+        loginInProgress = false;
+        buttons.forEach(b => b.disabled = false);
+    }
 
     const user = verifyCredentials(username, password);
     if (!user) return toast('Invalid username or password', 'error');

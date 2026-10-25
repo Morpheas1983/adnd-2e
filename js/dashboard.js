@@ -8,8 +8,8 @@ function renderDashboard(container) {
 
     // For player campaign switcher: only show campaigns this player has characters in
     const playerCampaigns = State.isDM 
-        ? [...new Set(State.characters.map(c => c.campaignId).filter(Boolean))]
-        : [...new Set(State.characters.filter(c => c.player === State.currentUser).map(c => c.campaignId).filter(Boolean))];
+        ? [...new Set([...State.characters.map(c => c.campaignId).filter(Boolean), ...getKnownCampaigns()])]
+        : [...new Set([...State.characters.filter(c => c.player === State.currentUser).map(c => c.campaignId).filter(Boolean), ...getKnownCampaigns()])];
 
     container.innerHTML = `
         <div class="min-h-screen p-4">
@@ -167,6 +167,7 @@ function createCampaign(name) {
     }
     // Create by switching to it
     State.campaignId = trimmed;
+    rememberCampaign(trimmed);
     Storage.save();
     if (db && firebaseAuth) {
         setupFirebaseListeners();

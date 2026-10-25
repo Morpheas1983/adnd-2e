@@ -16,26 +16,56 @@ let db = null;
 let firebaseAuth = null;
 let firebaseConnected = false;
 let firebaseListeners = [];
+let firebaseCampaignLoaded = false;   // true once the current campaign was read from Firebase and merged
+let accountsSynced = false;           // true once user accounts were read from Firebase and merged
+let accountsSyncPromise = null;
+let accountsListener = null;
+let _resolveFirebaseUser;
+const firebaseUserReady = new Promise(r => { _resolveFirebaseUser = r; });
+
+// Shared, campaign-independent data (user accounts + list of campaigns) lives here.
+// It sits under "campaigns/" because the database rules allow signed-in clients there.
+const ACCOUNTS_PATH = 'campaigns/_accounts';
+
+function fbKey(k) { return String(k).replace(/[.#$\[\]\/]/g, '_'); }
+function toArray(v) { if (!v) return []; return Array.isArray(v) ? v.filter(Boolean) : Object.values(v).filter(Boolean); }
+function currentPage() { return (location.pathname.split('/').pop() || 'index.html').replace('.html', '') || 'index'; }
+function userIsTyping() {
+    const el = document.activeElement;
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+}
+function safeRender() {
+    // Re-render after remote changes, but never wipe a form the user is filling in.
+    if (['login', 'create', 'index'].includes(currentPage())) return;
+    if (userIsTyping()) return;
+    if (typeof render === 'function') render();
+}
+function withTimeout(promise, ms) {
+    return Promise.race([promise, new Promise(r => setTimeout(() => r(null), ms))]);
+}
 
 function initFirebase() {
-    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes('YOUR_')) {
-        console.warn('Firebase not configured. Using localStorage only.');
+    if (typeof firebase === 'undefined' || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes('YOUR_')) {
+        console.warn('Firebase not available. Using localStorage only.');
+        _resolveFirebaseUser(null);
         return;
     }
     try {
-        firebase.initializeApp(firebaseConfig);
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         db = firebase.database();
         firebaseAuth = firebase.auth();
 
         firebaseAuth.signInAnonymously().catch(err => {
             console.error('Anonymous auth error:', err);
-            toast('Firebase auth failed. Working offline.', 'error');
+            _resolveFirebaseUser(null);
+            if (currentPage() !== 'login') toast('Firebase auth failed. Working offline.', 'error');
         });
 
         firebaseAuth.onAuthStateChanged(user => {
-            if (user && State.campaignId) {
-                setupFirebaseListeners();
-            }
+            if (!user) return;
+            _resolveFirebaseUser(user);
+            syncAccounts();
+            if (State.campaignId) setupFirebaseListeners();
         });
 
         db.ref('.info/connected').on('value', snap => {
@@ -44,47 +74,206 @@ function initFirebase() {
         });
     } catch (e) {
         console.error('Firebase init error:', e);
+        _resolveFirebaseUser(null);
     }
+}
+
+/* ---------- User accounts + campaign list (shared across devices) ---------- */
+function loadDeletedUsers() {
+    try { return JSON.parse(localStorage.getItem('adnd2e_deletedUsers') || '{}') || {}; } catch (e) { return {}; }
+}
+function loadKnownCampaigns() {
+    try { return JSON.parse(localStorage.getItem('adnd2e_knownCampaigns') || '[]') || []; } catch (e) { return []; }
+}
+function rememberCampaign(cid) {
+    if (!cid || cid === 'default') return;
+    const list = loadKnownCampaigns();
+    if (!list.includes(cid)) { list.push(cid); list.sort(); localStorage.setItem('adnd2e_knownCampaigns', JSON.stringify(list)); }
+}
+function getKnownCampaigns() {
+    const fromChars = (State.characters || []).map(c => c.campaignId).filter(Boolean);
+    return [...new Set([...loadKnownCampaigns(), ...fromChars])].filter(id => id !== 'default').sort();
+}
+
+function mergeUserLists(remoteUsers, localUsers, deleted) {
+    const map = {};
+    [...toArray(remoteUsers), ...toArray(localUsers)].forEach(u => {
+        if (!u || !u.username) return;
+        const cur = map[u.username];
+        if (!cur || (u.updatedAt || 0) > (cur.updatedAt || 0)) map[u.username] = u;
+    });
+    return Object.values(map).filter(u => {
+        const del = deleted[fbKey(u.username)];
+        return !(del && del >= (u.updatedAt || 0));
+    });
+}
+
+function applyRemoteAccounts(remote) {
+    remote = remote || {};
+    const deleted = loadDeletedUsers();
+    Object.entries(remote.deletedUsers || {}).forEach(([k, v]) => { if (!deleted[k] || v > deleted[k]) deleted[k] = v; });
+    const merged = mergeUserLists(remote.users, DB.users, deleted);
+    const usersChanged = JSON.stringify(merged) !== JSON.stringify(DB.users);
+    DB.users = merged;
+    if (usersChanged && currentPage() === 'users') safeRender();
+    localStorage.setItem('adnd2e_users', JSON.stringify(merged));
+    localStorage.setItem('adnd2e_deletedUsers', JSON.stringify(deleted));
+
+    const before = JSON.stringify(loadKnownCampaigns());
+    Object.values(remote.campaignList || {}).forEach(cid => rememberCampaign(cid));
+    if (JSON.stringify(loadKnownCampaigns()) !== before) refreshCampaignPickers();
+}
+
+function accountsPayload() {
+    const campaignList = {};
+    getKnownCampaigns().forEach(cid => { campaignList[fbKey(cid)] = cid; });
+    return { users: DB.users || [], deletedUsers: loadDeletedUsers(), campaignList };
+}
+
+function syncAccounts() {
+    if (!db) return Promise.resolve(false);
+    if (accountsSyncPromise) return accountsSyncPromise;
+    accountsSyncPromise = db.ref(ACCOUNTS_PATH).once('value').then(snap => {
+        applyRemoteAccounts(snap.val());
+        accountsSynced = true;
+        // Upload the merged result so every device ends up with the same accounts
+        db.ref(ACCOUNTS_PATH).update(accountsPayload()).catch(err => console.error('Accounts upload error:', err));
+        if (!accountsListener) {
+            accountsListener = db.ref(ACCOUNTS_PATH);
+            accountsListener.on('value', s => applyRemoteAccounts(s.val()));
+        }
+        return true;
+    }).catch(err => {
+        console.error('Accounts sync error:', err);
+        accountsSyncPromise = null;
+        return false;
+    });
+    return accountsSyncPromise;
+}
+
+function pushAccounts() {
+    if (!db || !accountsSynced) return;   // not synced yet: local changes get merged in on the next sync
+    db.ref(ACCOUNTS_PATH).update(accountsPayload()).catch(err => console.error('Accounts upload error:', err));
+}
+
+// Wait (briefly) for the shared accounts so a fresh device/browser knows every user
+function ensureAccountsLoaded(timeoutMs = 6000) {
+    if (accountsSynced) return Promise.resolve(true);
+    return withTimeout(firebaseUserReady.then(u => u ? syncAccounts() : false), timeoutMs);
+}
+
+function refreshCampaignPickers() {
+    const sel = document.getElementById('loginCampaign');
+    if (sel && document.activeElement !== sel) {
+        const val = sel.value;
+        const ids = getKnownCampaigns();
+        sel.innerHTML = `<option value="">All Characters</option>` +
+            ids.map(cid => `<option value="${cid}">${cid}</option>`).join('') +
+            `<option value="default">Solo Play (default)</option>`;
+        sel.value = val;
+    }
+    if (currentPage() === 'dashboard') safeRender();
+}
+
+/* ---------- Campaign data ---------- */
+function mergeById(localArr, remoteArr, remoteStamp) {
+    // Items on both sides: newest wins. Local-only items are kept only if they changed after the
+    // last remote save (otherwise they were deleted on another device). remoteStamp === null keeps all local-only items.
+    const byId = {};
+    toArray(remoteArr).forEach(x => { if (x && x.id != null) byId[x.id] = x; });
+    toArray(localArr).forEach(x => {
+        if (!x || x.id == null) return;
+        const r = byId[x.id];
+        if (r) { if ((x.lastUpdated || 0) > (r.lastUpdated || 0)) byId[x.id] = x; }
+        else if (remoteStamp === null || (x.lastUpdated || 0) > (remoteStamp || 0)) byId[x.id] = x;
+    });
+    return Object.values(byId);
+}
+
+function campaignChars(list, cid) {
+    return toArray(list).filter(c => (c.campaignId || cid) === cid).map(c => c.campaignId ? c : { ...c, campaignId: cid });
 }
 
 function setupFirebaseListeners() {
     if (!db || !State.campaignId) return;
     firebaseListeners.forEach(ref => ref.off());
     firebaseListeners = [];
+    firebaseCampaignLoaded = false;
 
-    const base = `campaigns/${State.campaignId}`;
+    const cid = State.campaignId;
+    const base = `campaigns/${cid}`;
+    rememberCampaign(cid);
+
+    // 1) Read once and merge with what this device has, so nothing is overwritten blindly
+    db.ref(base).once('value').then(snap => {
+        if (State.campaignId !== cid) return;
+        const remote = snap.val() || {};
+        const stamp = remote.lastUpdated || 0;
+        const others = State.characters.filter(c => (c.campaignId || 'default') !== cid);
+        const mine = State.characters.filter(c => (c.campaignId || 'default') === cid);
+        State.characters = [...others, ...mergeById(mine, campaignChars(remote.characters, cid), stamp)];
+        if (remote.creatures) State.creatures = mergeById(State.creatures, remote.creatures, null);
+        if (remote.campaign && (!State.campaign || (remote.campaign.lastUpdated || 0) >= (State.campaign.lastUpdated || 0))) State.campaign = remote.campaign;
+        if (remote.customSpells) {
+            const cs = { wizard: [], priest: [] };
+            ['wizard', 'priest'].forEach(t => {
+                const seen = {};
+                [...toArray(remote.customSpells[t]), ...toArray((State.customSpells || {})[t])].forEach(s => { if (s && s.name && !seen[s.name]) { seen[s.name] = 1; cs[t].push(s); } });
+            });
+            State.customSpells = cs;
+        }
+        if (remote.tacticalMap && Object.keys(remote.tacticalMap).length) State.tacticalMap = remote.tacticalMap;
+        if (remote.maps) saveMapList(mergeById(getMapList(), remote.maps, null));
+        if (remote.activeMapId) setActiveMapId(remote.activeMapId);
+        if (State.currentCharacter) {
+            const updated = State.characters.find(c => c.id === State.currentCharacter.id);
+            if (updated) State.currentCharacter = updated;
+        }
+        firebaseCampaignLoaded = true;
+        Storage.save({ silent: true });   // writes the merged result back to Firebase
+        safeRender();
+        attachCampaignListeners(cid);
+    }).catch(err => console.error('Campaign load error:', err));
+}
+
+function attachCampaignListeners(cid) {
+    const base = `campaigns/${cid}`;
 
     const charRef = db.ref(`${base}/characters`);
     charRef.on('value', snap => {
-        if (snap.exists()) {
-            const val = snap.val();
-            if (JSON.stringify(val) !== JSON.stringify(State.characters)) {
-                State.characters = val || [];
-                if (State.currentCharacter) {
-                    const updated = State.characters.find(c => c.id === State.currentCharacter.id);
-                    if (updated) State.currentCharacter = updated;
-                }
-                if (State.view !== 'create') render();
+        if (State.campaignId !== cid) return;
+        const others = State.characters.filter(c => (c.campaignId || 'default') !== cid);
+        const merged = [...others, ...campaignChars(snap.val(), cid)];
+        if (JSON.stringify(merged) !== JSON.stringify(State.characters)) {
+            State.characters = merged;
+            if (State.currentCharacter) {
+                const updated = State.characters.find(c => c.id === State.currentCharacter.id);
+                if (updated) State.currentCharacter = updated;
             }
+            localStorage.setItem('adnd2e_chars', JSON.stringify(State.characters));
+            safeRender();
         }
     });
     firebaseListeners.push(charRef);
 
     const creatureRef = db.ref(`${base}/creatures`);
     creatureRef.on('value', snap => {
-        if (snap.exists()) {
-            State.creatures = snap.val() || [];
-            if (State.view === 'dm_view' || State.view === 'bestiary') render();
-        }
+        if (!snap.exists()) return;
+        const val = toArray(snap.val());
+        if (JSON.stringify(val) === JSON.stringify(State.creatures)) return;
+        State.creatures = val;
+        localStorage.setItem('adnd2e_creatures', JSON.stringify(State.creatures));
+        if (['dm', 'bestiary'].includes(currentPage())) safeRender();
     });
     firebaseListeners.push(creatureRef);
 
     const campaignRef = db.ref(`${base}/campaign`);
     campaignRef.on('value', snap => {
-        if (snap.exists()) {
-            State.campaign = snap.val();
-            if (State.view === 'campaign') render();
-        }
+        if (!snap.exists()) return;
+        if (JSON.stringify(snap.val()) === JSON.stringify(State.campaign)) return;
+        State.campaign = snap.val();
+        localStorage.setItem('adnd2e_campaign', JSON.stringify(State.campaign));
+        if (currentPage() === 'campaign') safeRender();
     });
     firebaseListeners.push(campaignRef);
 
@@ -98,14 +287,14 @@ function setupFirebaseListeners() {
     mapRef.on('value', snap => {
         if (snap.exists()) {
             State.tacticalMap = snap.val();
-            if (State.view === 'tactical') drawTacticalMap();
+            if (currentPage() === 'tactical' && typeof drawTacticalMap === 'function') drawTacticalMap();
         }
     });
     firebaseListeners.push(mapRef);
 
     const mapsRef = db.ref(`${base}/maps`);
     mapsRef.on('value', snap => {
-        if (snap.exists()) saveMapList(snap.val() || []);
+        if (snap.exists()) saveMapList(toArray(snap.val()));
     });
     firebaseListeners.push(mapsRef);
 
@@ -113,7 +302,7 @@ function setupFirebaseListeners() {
     activeMapRef.on('value', snap => {
         if (snap.exists()) {
             setActiveMapId(snap.val());
-            if (State.view === 'tactical') drawTacticalMap();
+            if (currentPage() === 'tactical' && typeof drawTacticalMap === 'function') drawTacticalMap();
         }
     });
     firebaseListeners.push(activeMapRef);
@@ -237,10 +426,13 @@ const Storage = {
         localStorage.setItem('adnd2e_currentCharacter', State.currentCharacter ? State.currentCharacter.id : '');
         
         // Sync to Firebase if available
-        if (firebaseConnected && db && State.campaignId) {
-            const base = `campaigns/${State.campaignId}`;
+        // Sync to Firebase only after this campaign was loaded & merged (prevents overwriting other devices)
+        if (firebaseConnected && db && State.campaignId && firebaseCampaignLoaded) {
+            const cid = State.campaignId;
+            const base = `campaigns/${cid}`;
             const updates = {};
-            updates[`${base}/characters`] = State.characters;
+            updates[`${base}/characters`] = State.characters.filter(c => (c.campaignId || 'default') === cid);
+            if (cid !== 'default') updates[`${ACCOUNTS_PATH}/campaignList/${fbKey(cid)}`] = cid;
             updates[`${base}/creatures`] = State.creatures;
             updates[`${base}/customSpells`] = State.customSpells;
             updates[`${base}/campaign`] = State.campaign;

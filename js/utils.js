@@ -858,12 +858,17 @@ function createUser(username, password, role, name) {
         username: username,
         passwordHash: hashPassword(password),
         role: role,
-        name: name || username
+        name: name || username,
+        updatedAt: Date.now()
     };
     DB.users = DB.users || [];
     DB.users.push(user);
     
     localStorage.setItem('adnd2e_users', JSON.stringify(DB.users));
+    // A re-created user must not stay hidden by an old deletion record
+    const deleted = loadDeletedUsers(); delete deleted[fbKey(username)];
+    localStorage.setItem('adnd2e_deletedUsers', JSON.stringify(deleted));
+    pushAccounts();
     
     return { success: true, message: `User ${username} created successfully` };
 }
@@ -874,6 +879,9 @@ function deleteUser(username) {
     DB.users.splice(idx, 1);
     
     localStorage.setItem('adnd2e_users', JSON.stringify(DB.users));
+    const deleted = loadDeletedUsers(); deleted[fbKey(username)] = Date.now();
+    localStorage.setItem('adnd2e_deletedUsers', JSON.stringify(deleted));
+    pushAccounts();
     
     return { success: true, message: `User ${username} deleted` };
 }
@@ -980,6 +988,7 @@ function initApp() {
         }
         Storage.load();
         Sync.init();
+        initFirebase();
     } catch (err) {
         console.error('App initialization error:', err);
     }
@@ -1044,6 +1053,7 @@ function createCampaign(name) {
         return;
     }
     State.campaignId = trimmed;
+    rememberCampaign(trimmed);
     Storage.save();
     if (db && firebaseAuth) {
         setupFirebaseListeners();
