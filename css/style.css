@@ -1,0 +1,166 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lato:wght@300;400;700&display=swap');
+        :root { --parchment: #f4e4bc; --dark-parchment: #e6d5a7; --ink: #2c1810; --accent: #8b4513; --gold: #d4af37; --red: #8b0000; --blue: #1e3a5f; --green: #2d5016; }
+        body { font-family: 'Lato', sans-serif; background: linear-gradient(135deg, #1f2937 0%, #111827 100%); color: var(--ink); min-height: 100vh; overflow-x: hidden; }
+        .fantasy-font { font-family: 'Cinzel', serif; }
+        .parchment { background: var(--parchment); background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E"); box-shadow: inset 0 0 60px rgba(139,69,19,0.15), 0 10px 40px rgba(0,0,0,0.5); }
+        .scroll-border { border: 3px double var(--accent); border-radius: 8px; position: relative; }
+        .scroll-border::before { content: ''; position: absolute; top: -6px; left: -6px; right: -6px; bottom: -6px; border: 1px solid var(--gold); border-radius: 12px; pointer-events: none; }
+        .btn-fantasy { background: linear-gradient(to bottom, #8b4513, #5d2f0d); color: var(--gold); border: 2px solid var(--gold); font-family: 'Cinzel', serif; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s ease; cursor: pointer; }
+        .btn-fantasy:hover { background: linear-gradient(to bottom, #a0522d, #8b4513); box-shadow: 0 0 15px rgba(212,175,55,0.4); transform: translateY(-1px); }
+        .btn-fantasy:active { transform: translateY(1px); }
+        .btn-galactic { background: linear-gradient(to bottom, #4a5568, #2d3748); color: #e2e8f0; border: 2px solid #718096; font-family: 'Cinzel', serif; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s ease; cursor: pointer; }
+        .btn-galactic:hover { background: linear-gradient(to bottom, #718096, #4a5568); box-shadow: 0 0 15px rgba(113,128,150,0.4); }
+        .btn-magic { background: linear-gradient(to bottom, #1e3a5f, #0f1f33); color: #93c5fd; border: 2px solid #3b82f6; font-family: 'Cinzel', serif; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s ease; cursor: pointer; }
+        .btn-magic:hover { background: linear-gradient(to bottom, #2563eb, #1e3a5f); box-shadow: 0 0 15px rgba(59,130,246,0.4); }
+        .btn-danger { background: linear-gradient(to bottom, #7f1d1d, #450a0a); color: #fca5a5; border: 2px solid #dc2626; font-family: 'Cinzel', serif; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s ease; cursor: pointer; }
+        .btn-danger:hover { background: linear-gradient(to bottom, #991b1b, #7f1d1d); box-shadow: 0 0 15px rgba(220,38,38,0.4); }
+        .input-fantasy { background: rgba(255,255,255,0.7); border: 2px solid var(--accent); border-radius: 4px; font-family: 'Lato', sans-serif; transition: all 0.3s; }
+        .input-fantasy:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 8px rgba(212,175,55,0.3); background: rgba(255,255,255,0.9); }
+        .stat-box { background: linear-gradient(135deg, #f4e4bc, #e6d5a7); border: 2px solid var(--accent); border-radius: 8px; text-align: center; position: relative; transition: transform 0.2s; }
+        .stat-box:hover { transform: scale(1.02); }
+        .stat-box.invalid { border-color: #dc2626; background: linear-gradient(135deg, #fef2f2, #fee2e2); }
+        .stat-box.invalid .stat-value { color: #dc2626; }
+        .stat-box.invalid .stat-mod { color: #991b1b; }
+        .btn-fantasy:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
+        .stat-label { font-family: 'Cinzel', serif; font-size: 0.65rem; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-value { font-family: 'Cinzel', serif; font-size: 1.5rem; font-weight: 700; color: var(--ink); }
+        .stat-mod { font-size: 0.75rem; color: var(--red); font-weight: 700; }
+        .section-header { font-family: 'Cinzel', serif; color: var(--accent); border-bottom: 2px solid var(--gold); padding-bottom: 4px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .section-header i { color: var(--gold); }
+        .tab-btn { padding: 8px 16px; font-family: 'Cinzel', serif; font-size: 0.8rem; border: none; background: transparent; color: #9ca3af; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.3s; }
+        .tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+        .tab-btn:hover:not(.active) { color: #d1d5db; }
+        .hp-bar { height: 8px; background: #374151; border-radius: 4px; overflow: hidden; }
+        .hp-fill { height: 100%; background: linear-gradient(90deg, #dc2626, #ef4444); transition: width 0.5s ease; }
+        .xp-bar { height: 6px; background: #374151; border-radius: 3px; overflow: hidden; }
+        .xp-fill { height: 100%; background: linear-gradient(90deg, #d4af37, #fbbf24); transition: width 0.5s ease; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .modal-content { background: var(--parchment); border: 3px double var(--accent); border-radius: 12px; max-width: 700px; width: 100%; max-height: 90vh; overflow-y: auto; position: relative; }
+        .modal-content.wide { max-width: 900px; }
+        .spell-card { border: 2px solid var(--blue); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.3s; background: rgba(30,58,95,0.1); }
+        .spell-card:hover { border-color: #3b82f6; box-shadow: 0 4px 12px rgba(30,58,95,0.3); transform: translateY(-2px); }
+        .spell-card.selected { border-color: #3b82f6; background: rgba(59,130,246,0.15); box-shadow: 0 0 15px rgba(59,130,246,0.3); }
+        .inventory-row:hover { background: rgba(139,69,19,0.1); }
+        .saving-throw-box { background: rgba(139,69,19,0.1); border: 1px solid var(--accent); border-radius: 6px; padding: 8px; text-align: center; }
+        .saving-throw-box .value { font-family: 'Cinzel', serif; font-size: 1.25rem; font-weight: 700; color: var(--red); }
+        .saving-throw-box .label { font-size: 0.65rem; text-transform: uppercase; color: var(--accent); margin-top: 2px; }
+        .hidden { display: none !important; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        @media (max-width: 640px) { .grid-3 { grid-template-columns: 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--accent); color: var(--gold); padding: 12px 20px; border-radius: 8px; border: 2px solid var(--gold); font-family: 'Cinzel', serif; z-index: 100; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .fade-in { animation: fadeIn 0.4s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+        .spell-level-badge { background: linear-gradient(135deg, var(--blue), #0f1f33); color: #93c5fd; border: 1px solid #3b82f6; border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; font-weight: bold; }
+        .school-badge { background: rgba(139,69,19,0.2); color: var(--accent); border-radius: 4px; padding: 2px 8px; font-size: 0.7rem; }
+        .spell-detail-box { background: linear-gradient(135deg, #1e3a5f, #0f1f33); color: #e2e8f0; border: 2px solid #3b82f6; border-radius: 8px; padding: 16px; }
+        .spell-detail-box h3 { color: #93c5fd; border-bottom: 1px solid #3b82f6; padding-bottom: 8px; margin-bottom: 12px; }
+        .spell-detail-box .detail-row { display: flex; margin-bottom: 6px; }
+        .spell-detail-box .detail-label { color: #93c5fd; font-weight: 700; width: 100px; flex-shrink: 0; }
+        .spell-detail-box .detail-value { color: #e2e8f0; }
+        .prof-tag { display: inline-flex; align-items: center; gap: 4px; background: rgba(139,69,19,0.15); border: 1px solid var(--accent); border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; margin: 2px; }
+        .prof-tag button { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.75rem; padding: 0; margin-left: 4px; }
+        .prof-tag button:hover { color: #dc2626; }
+        .item-bonus { color: #166534; font-weight: 700; }
+        .item-special { color: #1e3a5f; font-style: italic; }
+        .creature-card { background: linear-gradient(135deg, #f4e4bc, #e6d5a7); border: 2px solid #7f1d1d; border-radius: 8px; }
+
+/* Tactical Map */
+.btn-tool { transition: all 0.2s; }
+.btn-tool:hover { transform: translateY(-1px); }
+#tacticalCanvas { image-rendering: pixelated; }
+.token-player { background: #3b82f6; }
+.token-monster { background: #6b7280; }
+.token-npc { background: #f59e0b; }
+.token-object { background: #9ca3af; }
+/* Active Effects & Conditions */
+.effect-badge { display: inline-flex; align-items: center; background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; border: 1px solid #f59e0b; border-radius: 4px; padding: 4px 8px; font-size: 0.8rem; font-weight: 600; }
+.effect-badge button { background: none; border: none; cursor: pointer; padding: 0; margin-left: 4px; }
+.condition-badge { display: inline-flex; align-items: center; background: linear-gradient(135deg, #fee2e2, #fecaca); color: #991b1b; border: 1px solid #ef4444; border-radius: 4px; padding: 4px 8px; font-size: 0.8rem; font-weight: 600; }
+.btn-kit { background: linear-gradient(to bottom, #7f1d1d, #450a0a); color: #fca5a5; border: 2px solid #dc2626; font-family: 'Cinzel', serif; text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s ease; cursor: pointer; }
+.btn-kit:hover { background: linear-gradient(to bottom, #991b1b, #7f1d1d); box-shadow: 0 0 15px rgba(220,38,38,0.4); }
+.btn-kit:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
+.stat-modified { border-color: #f59e0b !important; background: linear-gradient(135deg, #fef3c7, #fde68a) !important; }
+.effect-card { transition: all 0.2s; }
+.effect-card:hover { background: #fef3c7; }
+.condition-card { transition: all 0.2s; }
+.condition-card:hover { background: #fee2e2; }
+
+/* =========================================================
+   MOBILE / TOUCH SUPPORT
+   ========================================================= */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); padding-bottom: env(safe-area-inset-bottom); }
+button, a, select, input[type="checkbox"], input[type="radio"], .tab-btn { -webkit-tap-highlight-color: rgba(212,175,55,0.25); touch-action: manipulation; }
+img, canvas, video { max-width: 100%; }
+
+/* Horizontal tab bars: keep labels on one line and let the bar scroll */
+.overflow-x-auto { -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.overflow-x-auto > .tab-btn { flex-shrink: 0; white-space: nowrap; }
+
+/* Tactical map: canvas gestures */
+#tacticalCanvas { touch-action: none; }
+#tacticalCanvas.tool-select { touch-action: pan-x pan-y; }
+
+/* Touch devices have no hover: avoid "sticky" hover lifts */
+@media (hover: none) {
+    .btn-fantasy:hover, .btn-tool:hover, .spell-card:hover, .stat-box:hover { transform: none; }
+}
+
+@media (max-width: 767px) {
+    /* Page chrome: tighter spacing so content gets the width */
+    #app > .min-h-screen, #app > div > .min-h-screen { padding: 8px !important; }
+    #app .parchment.p-8 { padding: 1.25rem; }
+    #app .parchment.p-6 { padding: 1rem; }
+    #app .parchment.p-4 { padding: 0.75rem; }
+    #app .parchment.mb-4 { margin-bottom: 0.75rem; }
+    .scroll-border::before { top: -4px; left: -4px; right: -4px; bottom: -4px; }
+
+    /* Headings scale down */
+    #app h1.text-3xl, #app h1.text-2xl { font-size: 1.3rem; line-height: 1.6rem; }
+    #app h2.text-2xl, #app h2.text-xl { font-size: 1.15rem; line-height: 1.5rem; }
+
+    /* Toolbars / header rows wrap instead of overflowing off-screen */
+    .flex.justify-between:not(.flex-nowrap):not(.overflow-x-auto):not(.flex-col),
+    .flex.gap-1:not(.flex-nowrap):not(.overflow-x-auto):not(.flex-col),
+    .flex.gap-2:not(.flex-nowrap):not(.overflow-x-auto):not(.flex-col),
+    .flex.gap-3:not(.flex-nowrap):not(.overflow-x-auto):not(.flex-col),
+    .flex.gap-4:not(.flex-nowrap):not(.overflow-x-auto):not(.flex-col) { flex-wrap: wrap; }
+    .flex.justify-between:not(.flex-nowrap):not(.overflow-x-auto):not(.flex-col) { row-gap: 0.6rem; }
+    .flex > select, .flex > input[type="text"], .flex > input[type="search"], .flex > input:not([type]) { min-width: 0; max-width: 100%; }
+
+    /* Buttons: comfortable touch targets, less letter spacing */
+    .btn-fantasy, .btn-galactic, .btn-magic, .btn-danger, .btn-kit { letter-spacing: 0.5px; min-height: 40px; }
+    .tab-btn { padding: 10px 12px; }
+
+    /* Inputs at 16px stop iOS from zooming the page on focus */
+    input[type="text"], input[type="number"], input[type="password"], input[type="search"], input:not([type]), select, textarea { font-size: 16px !important; }
+
+    /* Modals become (almost) full-screen sheets */
+    .modal-overlay { padding: 6px; align-items: flex-end; }
+    .modal-content, .modal-content.wide { max-width: 100%; max-height: calc(100vh - 12px); max-height: calc(100dvh - 12px); border-radius: 12px; }
+    .modal-content .p-6 { padding: 1rem; }
+
+    /* Tables scroll inside their card rather than stretching the page */
+    .parchment table { font-size: 0.85rem; }
+    .spell-detail-box .detail-label { width: 84px; }
+
+    /* Tactical map: larger squares on phones; pan the map by swiping */
+    .tactical-scroll { overflow: auto; -webkit-overflow-scrolling: touch; max-height: 75vh; }
+    .tactical-scroll #tacticalCanvas { width: 750px !important; max-width: none; }
+
+    /* Dashboard campaign switcher takes a full row */
+    .flex:has(> .campaign-row) { width: 100%; min-width: 0; }
+    .campaign-row { width: 100%; flex-wrap: nowrap !important; border-right: none !important; padding-right: 0 !important; margin-right: 0 !important; }
+    .campaign-row select { flex: 1 1 0; min-width: 0 !important; }
+    .campaign-row input { flex: 1 1 0; width: auto !important; min-width: 0; }
+    .campaign-row button { flex-shrink: 0; }
+
+    /* Toasts span the bottom of the screen */
+    .toast { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); text-align: center; }
+}
