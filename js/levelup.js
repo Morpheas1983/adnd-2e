@@ -9,10 +9,13 @@ function renderLevelUp(container) {
     const hd = cls ? cls.hd : 6;
     const conMod = getModifier(char.stats?.con || 10);
 
-    const knownWP = char.weaponProfs || [];
-    const knownNWP = char.nonweaponProfs || [];
-    const availableWP = DB.weapon_proficiencies.filter(p => !knownWP.includes(p));
-    const availableNWP = DB.nonweapon_proficiencies.filter(p => !knownNWP.includes(p.name));
+    const now = charProfSummary(char);
+    const next = profSlotSummary({ className: char.class, level: nextLevel, intScore: char.stats?.int || 10,
+        weaponProfs: char.weaponProfs, weaponSpecs: char.weaponSpecs, nonweaponProfs: char.nonweaponProfs });
+    const gainedW = next.weapon.total - now.weapon.total, gainedN = next.nonweapon.total - now.nonweapon.total;
+    const newSlotsText = (gainedW || gainedN)
+        ? `Level ${nextLevel} gives you ${[gainedW ? `+${gainedW} weapon` : '', gainedN ? `+${gainedN} non-weapon` : ''].filter(Boolean).join(' and ')} slot(s). Pick new proficiencies now or keep the slots for later.`
+        : `No new proficiency slots at level ${nextLevel}.${(next.weapon.left > 0 || next.nonweapon.left > 0) ? ' You still have unspent slots you can use.' : ''}`;
 
     container.innerHTML = `
         <div class="min-h-screen p-4">
@@ -61,26 +64,9 @@ function renderLevelUp(container) {
                             </div>
                         </div>
                         <div class="mb-6 text-left">
-                            <h3 class="fantasy-font text-lg text-amber-900 mb-3">New Proficiencies</h3>
-                            <p class="text-xs text-amber-700 mb-2">Already known proficiencies are hidden from selection.</p>
-                            <div class="grid-2 gap-4">
-                                <div>
-                                    <label class="block text-sm font-bold text-amber-900 mb-1">Weapon Proficiency</label>
-                                    <select id="newWeaponProf" class="input-fantasy w-full px-3 py-2">
-                                        <option value="">Select...</option>
-                                        ${availableWP.map(p => `<option value="${p}">${p}</option>`).join('')}
-                                    </select>
-                                    ${availableWP.length === 0 ? '<p class="text-xs text-red-600 mt-1">All weapon proficiencies already known!</p>' : ''}
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-bold text-amber-900 mb-1">Non-Weapon Proficiency</label>
-                                    <select id="newNonweaponProf" class="input-fantasy w-full px-3 py-2">
-                                        <option value="">Select...</option>
-                                        ${availableNWP.map(p => `<option value="${p.name}">${p.name} (${p.ability})</option>`).join('')}
-                                    </select>
-                                    ${availableNWP.length === 0 ? '<p class="text-xs text-red-600 mt-1">All non-weapon proficiencies already known!</p>' : ''}
-                                </div>
-                            </div>
+                            <h3 class="fantasy-font text-lg text-amber-900 mb-1">Proficiencies</h3>
+                            <p class="text-sm text-amber-700 mb-3">${newSlotsText}</p>
+                            <div id="levelProfPicker"></div>
                         </div>
                         <button onclick="confirmLevelUp()" class="btn-fantasy px-8 py-3 rounded text-lg font-bold">
                             <i class="fas fa-level-up-alt mr-2"></i>Confirm Level Up
@@ -95,6 +81,16 @@ function renderLevelUp(container) {
             </div>
         </div>
     `;
+}
+
+function mountLevelProfPicker() {
+    const char = State.currentCharacter;
+    const el = $('levelProfPicker');
+    if (!el || !char) return;
+    ProfPicker.mount(el, {
+        className: char.class, level: (char.level || 1) + 1, intScore: char.stats?.int || 10,
+        lockedWP: char.weaponProfs || [], lockedSpecs: char.weaponSpecs || [], lockedNWP: char.nonweaponProfs || []
+    });
 }
 
 function rollLevelUpHP() {
@@ -114,15 +110,12 @@ function confirmLevelUp() {
     char.hp = char.maxHp;
     char.lastUpdated = Date.now();
 
-    const newWP = $('newWeaponProf')?.value;
-    const newNWP = $('newNonweaponProf')?.value;
-    if (newWP) {
-        char.weaponProfs = char.weaponProfs || [];
-        char.weaponProfs.push(newWP);
-    }
-    if (newNWP) {
-        char.nonweaponProfs = char.nonweaponProfs || [];
-        char.nonweaponProfs.push(newNWP);
+    const pickerEl = $('levelProfPicker');
+    if (pickerEl && pickerEl._pp) {
+        const v = ProfPicker.value(pickerEl);
+        char.weaponProfs = v.weaponProfs;
+        char.weaponSpecs = canSpecialize(char.class) ? v.weaponSpecs : (char.weaponSpecs || []);
+        char.nonweaponProfs = v.nonweaponProfs;
     }
     if (char.class === 'Thief' || char.class === 'Bard') {
         DB.thieving_skills.forEach(s => {
@@ -134,7 +127,7 @@ function confirmLevelUp() {
     changeView('sheet');
 }
 
-function render() { renderLevelUp(document.getElementById('app')); }
+function render() { renderLevelUp(document.getElementById('app')); mountLevelProfPicker(); }
 
 /* Init */
-bootPage({ character: true }, () => renderLevelUp(document.getElementById('app')));
+bootPage({ character: true }, () => { renderLevelUp(document.getElementById('app')); mountLevelProfPicker(); });

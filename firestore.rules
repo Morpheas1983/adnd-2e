@@ -82,6 +82,16 @@ service cloud.firestore {
         allow read, write: if isDM(cid) || isAdmin();
       }
 
+      // Campaign log: creatures defeated, spells cast, XP given (used by the DM to award XP)
+      match /log/{entryId} {
+        allow read: if isMember(cid) || isAdmin();
+        // players log their own actions (e.g. spells they cast); the DM logs anything
+        allow create: if isDM(cid) || isAdmin()
+          || (isMember(cid) && request.resource.data.byUid == uid() && request.resource.data.type == 'spell'
+              && request.resource.data.awarded == false);
+        allow update, delete: if isDM(cid) || isAdmin();
+      }
+
       // Shared campaign state
       match /state/{docId} {
         allow read: if isMember(cid) || isAdmin();

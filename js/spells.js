@@ -208,6 +208,7 @@ function castSpell(spellName, spellLevel) {
     char.usedSpellSlots[spellLevel] = used + 1;
     char.lastUpdated = Date.now();
     Storage.save();
+    logCampaignEvent('spell', { spell: spellName, level: spellLevel, charClass: char.class }, char);
     toast(`Cast ${spellName}! ${totalSlots - used - 1} Level ${spellLevel} slot(s) remaining.`);
     render();
 }

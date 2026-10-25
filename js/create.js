@@ -21,7 +21,7 @@ function renderCreate(container) {
                         <button class="tab-btn active" data-step="1">1. Basics</button>
                         <button class="tab-btn" data-step="2">2. Class & Kit</button>
                         <button class="tab-btn" data-step="3">3. Stats</button>
-                        <button class="tab-btn" data-step="4">4. Details</button>
+                        <button class="tab-btn" data-step="4">4. Proficiencies & Details</button>
                         <button class="tab-btn" data-step="5">5. HP & Equipment</button>
                     </div>
                     <div id="step1" class="create-step">
@@ -69,17 +69,6 @@ function renderCreate(container) {
                             <div class="section-header"><i class="fas fa-hat-wizard"></i>Magic Schools / Spheres</div>
                             <div id="schoolSphereContent" class="p-3 bg-amber-100 rounded border border-amber-300 text-sm"></div>
                         </div>
-                        <div class="section-header"><i class="fas fa-shield-alt"></i>Proficiencies</div>
-                        <div class="grid-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-bold text-amber-900 mb-1">Weapon Proficiencies</label>
-                                <div id="weaponProfs" class="space-y-2 max-h-48 overflow-y-auto p-2 border border-amber-300 rounded bg-amber-50"></div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-bold text-amber-900 mb-1">Non-Weapon Proficiencies</label>
-                                <div id="nonweaponProfs" class="space-y-2 max-h-48 overflow-y-auto p-2 border border-amber-300 rounded bg-amber-50"></div>
-                            </div>
-                        </div>
                     </div>
                     <div id="step3" class="create-step hidden">
                         <div class="flex justify-between items-center mb-4">
@@ -101,6 +90,10 @@ function renderCreate(container) {
                         <div id="statValidation" class="mb-2 text-sm font-bold"></div><div id="statPreview" class="p-3 bg-amber-100 rounded border border-amber-300 text-sm"></div>
                     </div>
                     <div id="step4" class="create-step hidden">
+                        <div class="section-header"><i class="fas fa-shield-alt"></i>Proficiencies</div>
+                        <p class="text-sm text-amber-800 mb-3">Spend all your proficiency slots. The counters turn green when you have used exactly the slots you have.</p>
+                        <div id="profPicker" class="mb-6"></div>
+                        <div class="section-header"><i class="fas fa-user-edit"></i>Details</div>
                         <div class="grid-2 gap-4">
                             <div>
                                 <label class="block text-sm font-bold text-amber-900 mb-1">Age</label>
@@ -257,6 +250,10 @@ function nextStep() {
             if (val < classMin) return toast(`${s.toUpperCase()} must be at least ${classMin} for ${clsName}`, 'error');
         }
     }
+    if (createStep === 4) {
+        const problem = profStepProblem();
+        if (problem) return toast('Proficiencies: ' + problem, 'error');
+    }
     createStep++;
     updateWizardUI();
 }
@@ -279,6 +276,8 @@ function updateWizardUI() {
     $('finishBtn').classList.toggle('hidden', createStep !== 5);
     if (createStep === 2) updateClassOptions();
     if (createStep === 3) updateStatPreview();
+    if (createStep === 4) initProficiencySelectors();
+    else { const h = $('profGateHint'); if (h) h.remove(); const nb = $('nextBtn'); if (nb) { nb.disabled = false; nb.title = ''; } }
     if (createStep === 5) {
         updateGoldDisplay();
         updateCreateHPDisplay();
@@ -378,7 +377,7 @@ function updateClassOptions() {
     preview.innerHTML = `
         <strong>${cls}</strong><br>
         Hit Die: d${c.hd} | THAC0: ${c.thac0[0][1]} at 1st<br>
-        Weapon Proficiency Slots: ${c.prof_slots.weapon} | Non-Weapon: ${c.prof_slots.nonweapon}<br>
+        Weapon Proficiency Slots: ${c.prof_slots.weapon} | Non-Weapon: ${c.prof_slots.nonweapon} (+ bonus slots from INT)<br>
         Prime Requisite: ${c.prime_req} | Alignment: ${c.alignment.join(', ')}
     `;
     initProficiencySelectors();
@@ -407,26 +406,50 @@ function rollCreateHP() {
 
 function initProficiencySelectors() {
     const cls = $('charClass').value;
-    if (!cls) return;
-    const c = DB.classes[cls];
-    const wpDiv = $('weaponProfs');
-    if (wpDiv) {
-        wpDiv.innerHTML = DB.weapon_proficiencies.map(p => `
-            <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-amber-200 rounded">
-                <input type="checkbox" name="wp" value="${p}" class="accent-amber-700">
-                <span class="text-sm">${p}</span>
-            </label>
-        `).join('');
+    const el = $('profPicker');
+    if (!cls || !el) return;
+    const intScore = parseInt($('stat_int')?.value) || 10;
+    // Keep what was already ticked if the class is the same
+    const prev = el._pp && el._pp.className === cls ? ProfPicker.value(el) : null;
+    ProfPicker.mount(el, {
+        className: cls, level: 1, intScore,
+        selectedWP: prev ? prev.weaponProfs : [], selectedSpecs: prev ? prev.weaponSpecs : [], selectedNWP: prev ? prev.nonweaponProfs : [],
+        onChange: updateProfGate
+    });
+    updateProfGate();
+}
+
+// Proficiency step: may only continue with exactly the available slots used
+function profStepProblem() {
+    const el = $('profPicker');
+    if (!el || !el._pp) return 'Choose a class first';
+    const sum = ProfPicker.summary(el);
+    const parts = [];
+    const describe = (label, x) => {
+        if (x.used < x.total) parts.push(`${x.total - x.used} ${label} slot${x.total - x.used > 1 ? 's' : ''} left to spend`);
+        if (x.used > x.total) parts.push(`${x.used - x.total} ${label} slot${x.used - x.total > 1 ? 's' : ''} too many`);
+    };
+    describe('weapon', sum.weapon);
+    describe('non-weapon', sum.nonweapon);
+    if (!parts.length) return null;
+    // A DM may give extra proficiencies (over the limit), but not leave slots unspent
+    if (canOverrideProfLimits() && sum.weapon.used >= sum.weapon.total && sum.nonweapon.used >= sum.nonweapon.total) return null;
+    return parts.join(', ');
+}
+
+function updateProfGate() {
+    if (createStep !== 4) return;
+    const problem = profStepProblem();
+    const btn = $('nextBtn');
+    if (btn) { btn.disabled = !!problem; btn.title = problem || ''; }
+    let hint = $('profGateHint');
+    if (!hint && btn) {
+        hint = document.createElement('div');
+        hint.id = 'profGateHint';
+        hint.className = 'text-sm text-right mt-2';
+        btn.parentElement.after(hint);
     }
-    const nwpDiv = $('nonweaponProfs');
-    if (nwpDiv) {
-        nwpDiv.innerHTML = DB.nonweapon_proficiencies.map(p => `
-            <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-amber-200 rounded">
-                <input type="checkbox" name="nwp" value="${p.name}" class="accent-amber-700">
-                <span class="text-sm">${p.name} (${p.ability}${formatMod(p.mod)})</span>
-            </label>
-        `).join('');
-    }
+    if (hint) hint.innerHTML = problem ? `<span class="text-red-700"><i class="fas fa-exclamation-circle mr-1"></i>${problem}</span>` : '<span class="text-green-700"><i class="fas fa-check-circle mr-1"></i>All proficiency slots chosen</span>';
 }
 
 function rollStartingGold() {
@@ -448,7 +471,8 @@ function addToInventory(type, name) {
     if (!item) return;
     if (tempGold < item.cost) return toast('Not enough gold!', 'error');
     tempGold -= item.cost;
-    tempInventory.push({...item, type, qty: 1, equipped: false});
+    if ($('charGold')) $('charGold').value = tempGold;   // keep the gold box in step (it is the source of truth)
+    tempInventory.push({...item, type, qty: 1, equipped: false, ...(type === 'weapon' ? { baseName: item.name } : {})});
     updateGoldDisplay();
     toast(`Added ${name}`);
 }
@@ -480,8 +504,9 @@ function finishCreation() {
         stats[s] = parseInt($('stat_'+s).value) || 10;
     });
     const maxHp = parseInt($('createHP').value) || 1;
-    const weaponProfs = Array.from(document.querySelectorAll('input[name="wp"]:checked')).map(cb => cb.value);
-    const nonweaponProfs = Array.from(document.querySelectorAll('input[name="nwp"]:checked')).map(cb => cb.value);
+    const profProblem = profStepProblem();
+    if (profProblem) return toast('Proficiencies: ' + profProblem, 'error');
+    const { weaponProfs, weaponSpecs, nonweaponProfs } = ProfPicker.value($('profPicker'));
     const selectedSchools = Array.from(document.querySelectorAll('input[name="wizardSchool"]:checked')).map(cb => cb.value);
     const selectedSpheres = Array.from(document.querySelectorAll('input[name="priestSphere"]:checked')).map(cb => cb.value);
 
@@ -492,7 +517,7 @@ function finishCreation() {
         age: $('charAge').value, height: $('charHeight').value, weight: $('charWeight').value,
         hair: $('charHair').value, eyes: $('charEyes').value, deity: $('charDeity').value,
         background: $('charBackground').value,
-        weaponProfs, nonweaponProfs,
+        weaponProfs, weaponSpecs, nonweaponProfs,
         selectedSchools: selectedSchools.length ? selectedSchools : [],
         selectedSpheres: selectedSpheres.length ? selectedSpheres : [],
         inventory: tempInventory.map(i => ({...i, equipped: i.type === 'armor'})),

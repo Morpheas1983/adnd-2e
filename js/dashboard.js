@@ -43,6 +43,12 @@ function renderDashboard(container) {
                                 <button onclick="changeView('dm_view')" class="btn-fantasy px-4 py-2 rounded text-sm">
     <i class="fas fa-users mr-1"></i>Party View
 </button>
+                                <button onclick="changeView('battle')" class="btn-magic px-4 py-2 rounded text-sm">
+                                    <i class="fas fa-khanda mr-1"></i>Battle
+                                </button>
+                                <button onclick="changeView('stats')" class="btn-fantasy px-4 py-2 rounded text-sm">
+                                    <i class="fas fa-chart-bar mr-1"></i>Stats & XP
+                                </button>
                             ` : ''}
                             ${inCampaign ? `
                             <button onclick="changeView('campaign')" class="btn-fantasy px-4 py-2 rounded text-sm">

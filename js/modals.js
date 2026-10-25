@@ -241,7 +241,7 @@ function selectAddItem(type, idx) {
     if (type === 'weapon') item = DB.weapons[idx];
     else if (type === 'armor') item = DB.armor[idx];
     else item = DB.gear[idx];
-    selectedAddItem = { ...item, type, source: 'db' };
+    selectedAddItem = { ...item, type, source: 'db', ...(type === 'weapon' ? { baseName: item.name } : {}) };
     $('itemModifierPanel').classList.remove('hidden');
     $('modAttack').value = 0;
     $('modDamage').value = 0;
@@ -341,6 +341,14 @@ function showEditItemModal(idx) {
                             <label class="block text-sm font-bold text-amber-900 mb-1">Damage Dice</label>
                             <input type="text" id="editItemDamage" class="input-fantasy w-full px-3 py-2" value="${item.damage || item.damage_sm || ''}">
                         </div>
+                        <div>
+                            <label class="block text-sm font-bold text-amber-900 mb-1">Weapon Proficiency</label>
+                            <select id="editItemProf" class="input-fantasy w-full px-3 py-2">
+                                <option value="">Automatic${weaponProfFor({ name: item.name, baseName: item.baseName }) ? ` (${weaponProfFor({ name: item.name, baseName: item.baseName })})` : ' (none found)'}</option>
+                                ${DB.weapon_proficiencies.map(p => `<option value="${p}" ${item.profName === p ? 'selected' : ''}>${p}</option>`).join('')}
+                            </select>
+                            <p class="text-xs text-amber-700 mt-1">Which proficiency this weapon uses (for the non-proficiency penalty and specialization).</p>
+                        </div>
                         ` : ''}
                         ${item.type === 'armor' || item.type === 'shield' ? `
                         <div class="grid-2 gap-3">
@@ -397,6 +405,8 @@ function saveItemEdit(idx) {
             item.damage = $('editItemDamage').value.trim() || item.damage;
             if (item.bonusAttack === 0 || item.bonusAttack === undefined) delete item.bonusAttack;
             if (item.bonusDamage === 0 || item.bonusDamage === undefined) delete item.bonusDamage;
+            const prof = $('editItemProf')?.value;
+            if (prof) item.profName = prof; else delete item.profName;
         }
         if (item.type === 'armor') {
             const acVal = $('editItemAC').value.trim();
@@ -465,78 +475,32 @@ function showEditLevelModal() {
 
 function showManageProfsModal() {
     const char = State.currentCharacter;
-    const expected = getExpectedProfs(char.class, char.level);
-    const knownWP = char.weaponProfs || [];
-    const knownNWP = char.nonweaponProfs || [];
-    const availableWP = DB.weapon_proficiencies.filter(p => !knownWP.includes(p));
-    const availableNWP = DB.nonweapon_proficiencies.filter(p => !knownNWP.includes(p.name));
-
+    if (!char) return;
     $('modalContainer').innerHTML = `
         <div class="modal-overlay" onclick="closeModal(event)">
             <div class="modal-content wide" onclick="event.stopPropagation()">
                 <div class="p-6">
-                    <h2 class="fantasy-font text-xl font-bold text-amber-900 mb-4">Manage Proficiencies</h2>
-                    <div class="grid-2 gap-6">
-                        <div>
-                            <div class="flex justify-between items-center mb-3">
-                                <h3 class="font-bold text-amber-900">Weapon Proficiencies</h3>
-                                <span class="text-xs ${knownWP.length > expected.weapon ? 'text-red-600' : (knownWP.length < expected.weapon ? 'text-amber-600' : 'text-green-600')}">${knownWP.length} / ${expected.weapon} expected</span>
-                            </div>
-                            <div class="mb-3">
-                                <div class="flex gap-2">
-                                    <select id="addWP" class="input-fantasy flex-1 px-3 py-2 text-sm">
-                                        <option value="">Add proficiency...</option>
-                                        ${availableWP.map(p => `<option value="${p}">${p}</option>`).join('')}
-                                    </select>
-                                    <button onclick="addProfFromModal('weapon')" class="btn-fantasy px-3 py-2 rounded text-sm">Add</button>
-                                </div>
-                            </div>
-                            <div class="max-h-48 overflow-y-auto border border-amber-300 rounded bg-amber-50 p-2">
-                                ${knownWP.length === 0 ? '<p class="text-sm text-amber-700 italic">None</p>' : ''}
-                                ${knownWP.map((p, idx) => `
-                                    <div class="flex justify-between items-center p-2 border-b border-amber-200 last:border-0">
-                                        <span class="text-sm font-bold text-amber-900">${p}</span>
-                                        <button onclick="removeProfFromModal('weapon', ${idx})" class="text-red-700 hover:text-red-900 text-sm">
-                                            <i class="fas fa-times"></i> Remove
-                                        </button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        <div>
-                            <div class="flex justify-between items-center mb-3">
-                                <h3 class="font-bold text-amber-900">Non-Weapon Proficiencies</h3>
-                                <span class="text-xs ${knownNWP.length > expected.nonweapon ? 'text-red-600' : (knownNWP.length < expected.nonweapon ? 'text-amber-600' : 'text-green-600')}">${knownNWP.length} / ${expected.nonweapon} expected</span>
-                            </div>
-                            <div class="mb-3">
-                                <div class="flex gap-2">
-                                    <select id="addNWP" class="input-fantasy flex-1 px-3 py-2 text-sm">
-                                        <option value="">Add proficiency...</option>
-                                        ${availableNWP.map(p => `<option value="${p.name}">${p.name} (${p.ability})</option>`).join('')}
-                                    </select>
-                                    <button onclick="addProfFromModal('nonweapon')" class="btn-fantasy px-3 py-2 rounded text-sm">Add</button>
-                                </div>
-                            </div>
-                            <div class="max-h-48 overflow-y-auto border border-amber-300 rounded bg-amber-50 p-2">
-                                ${knownNWP.length === 0 ? '<p class="text-sm text-amber-700 italic">None</p>' : ''}
-                                ${knownNWP.map((p, idx) => `
-                                    <div class="flex justify-between items-center p-2 border-b border-amber-200 last:border-0">
-                                        <span class="text-sm font-bold text-amber-900">${p}</span>
-                                        <button onclick="removeProfFromModal('nonweapon', ${idx})" class="text-red-700 hover:text-red-900 text-sm">
-                                            <i class="fas fa-times"></i> Remove
-                                        </button>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-4 flex justify-end">
-                        <button onclick="closeModal(); render();" class="btn-galactic px-6 py-2 rounded">Close</button>
+                    <h2 class="fantasy-font text-xl font-bold text-amber-900 mb-1">Manage Proficiencies</h2>
+                    <p class="text-sm text-amber-700 mb-3">${escapeHtml(char.name)}: level ${char.level} ${char.class}, INT ${char.stats?.int || 10}. Tick to learn, untick to forget.</p>
+                    <div id="manageProfPicker"></div>
+                    <p id="manageProfMsg" class="text-sm text-red-700 mt-2"></p>
+                    <div class="mt-4 flex justify-end gap-2">
+                        <button onclick="closeModal()" class="btn-galactic px-4 py-2 rounded">Cancel</button>
+                        <button id="manageProfSave" onclick="saveManagedProfs()" class="btn-fantasy px-6 py-2 rounded"><i class="fas fa-save mr-1"></i>Save</button>
                     </div>
                 </div>
             </div>
         </div>
     `;
+    const before = charProfSummary(char);
+    const el = $('manageProfPicker');
+    el._before = before;
+    ProfPicker.mount(el, {
+        className: char.class, level: char.level, intScore: char.stats?.int || 10,
+        selectedWP: char.weaponProfs || [], selectedSpecs: char.weaponSpecs || [], selectedNWP: char.nonweaponProfs || [],
+        onChange: updateManageProfMsg
+    });
+    updateManageProfMsg();
 }
 
 function showAddSpellModal() {
@@ -591,6 +555,9 @@ function showCreatureModal(id) {
                         <div><label class="block text-xs font-bold text-amber-900">HP / Max HP</label>
                             <div class="flex gap-2"><input id="cHP" type="number" class="input-fantasy w-full px-2 py-1" value="${creature?.hp||1}"><input id="cMaxHP" type="number" class="input-fantasy w-full px-2 py-1" value="${creature?.maxHp||1}"></div>
                         </div>
+                        <div><label class="block text-xs font-bold text-amber-900">Hit Dice / XP value</label>
+                            <div class="flex gap-2"><input id="cHD" class="input-fantasy w-full px-2 py-1" placeholder="e.g. 4+1" value="${creature?.hd||''}"><input id="cXP" type="number" class="input-fantasy w-full px-2 py-1" placeholder="XP" value="${creature?.xp||''}"></div>
+                        </div>
                         <div><label class="block text-xs font-bold text-amber-900">AC / THAC0</label>
                             <div class="flex gap-2"><input id="cAC" type="number" class="input-fantasy w-full px-2 py-1" value="${creature?.ac||10}"><input id="cTHAC0" type="number" class="input-fantasy w-full px-2 py-1" value="${creature?.thac0||20}"></div>
                         </div>
@@ -616,6 +583,8 @@ function showCreatureModal(id) {
 function closeModal(e) {
     if (e && e.target !== e.currentTarget) return;
     $('modalContainer').innerHTML = '';
+    // Apply any live updates that arrived while the dialog was open
+    if (typeof renderPending !== 'undefined' && renderPending) setTimeout(safeRender, 0);
 }
 
 function showChangeClassModal() {
@@ -918,4 +887,35 @@ function showSpellTargetModal(spellName, spellLevel) {
             </div>
         </div>
     `;
+}
+
+function manageProfProblem() {
+    const el = $('manageProfPicker');
+    const sum = ProfPicker.summary(el);
+    const before = el._before;
+    if (canOverrideProfLimits()) return null;
+    const over = [];
+    // Going over the limit is only blocked if it makes things worse than before
+    if (sum.weapon.used > sum.weapon.total && sum.weapon.used > before.weapon.used) over.push('weapon');
+    if (sum.nonweapon.used > sum.nonweapon.total && sum.nonweapon.used > before.nonweapon.used) over.push('non-weapon');
+    return over.length ? `Not enough ${over.join(' and ')} slots. Only the DM can grant extra proficiencies.` : null;
+}
+
+function updateManageProfMsg() {
+    const problem = manageProfProblem();
+    const msg = $('manageProfMsg'); if (msg) msg.textContent = problem || '';
+    const btn = $('manageProfSave'); if (btn) btn.disabled = !!problem;
+}
+
+function saveManagedProfs() {
+    if (manageProfProblem()) return;
+    const char = State.currentCharacter;
+    const v = ProfPicker.value($('manageProfPicker'));
+    char.weaponProfs = v.weaponProfs;
+    char.weaponSpecs = canSpecialize(char.class) ? v.weaponSpecs : [];
+    char.nonweaponProfs = v.nonweaponProfs;
+    Storage.save();
+    closeModal();
+    render();
+    toast('Proficiencies updated');
 }

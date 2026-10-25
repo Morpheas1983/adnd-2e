@@ -50,13 +50,17 @@ function userIsTyping() {
     const el = document.activeElement;
     return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 }
+let renderPending = false;
 function safeRender() {
-    // Re-render after remote changes, but never wipe a form the user is filling in.
+    // Re-render after remote changes, but never wipe a form the user is filling in:
+    // if they are typing (or a dialog is open) the refresh happens as soon as they leave the field / close it.
     if (!Cloud.ready) return;
     if (['login', 'create', 'index'].includes(currentPage())) return;
-    if (userIsTyping() || document.querySelector('#modalContainer .modal-overlay')) return;
+    if (userIsTyping() || document.querySelector('#modalContainer .modal-overlay')) { renderPending = true; return; }
+    renderPending = false;
     if (typeof render === 'function') render();
 }
+document.addEventListener('focusout', () => setTimeout(() => { if (renderPending) safeRender(); }, 60));
 function withTimeout(promise, ms) { return Promise.race([promise, new Promise(r => setTimeout(() => r(null), ms))]); }
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function parseJson(s, fallback) { try { return s ? JSON.parse(s) : fallback; } catch (e) { return fallback; } }
@@ -691,4 +695,31 @@ function getAvailableSpells(char) {
     }
     else if (isPriest) base = [...DB.priest_spells, ...(State.customSpells.priest || [])];
     return base;
+}
+
+/* ============================
+   CAMPAIGN LOG (kills, spells cast, XP awards) -> campaigns/{cid}/log/{id}
+   ============================ */
+function logCampaignEvent(type, data, char) {
+    try {
+        const cid = char ? (char.campaignId && char.campaignId !== 'default' ? char.campaignId : null) : State.campaignId;
+        if (!fs || !cid || !State.currentUser) return Promise.resolve(null);
+        const ref = fs.collection('campaigns').doc(cid).collection('log').doc();
+        const entry = clean({
+            type, at: Date.now(), byUid: State.currentUser, byName: State.currentUserName,
+            charId: char ? char.id : (data.charId || null), charName: char ? char.name : (data.charName || null),
+            awarded: false, ...data
+        });
+        entry.createdAt = serverTime();
+        return ref.set(entry).then(() => ref.id).catch(err => { console.warn('Log failed', err); return null; });
+    } catch (e) { console.warn(e); return Promise.resolve(null); }
+}
+
+let campaignLog = [];
+function subscribeCampaignLog(onUpdate) {
+    if (!State.campaignId || !fs) return;
+    Cloud.unsubs.push(fs.collection('campaigns').doc(State.campaignId).collection('log').onSnapshot(snap => {
+        campaignLog = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.at || 0) - (a.at || 0));
+        if (onUpdate) onUpdate();
+    }, err => console.error('Log error', err)));
 }

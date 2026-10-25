@@ -37,6 +37,12 @@ function renderDMView(container) {
                             <button onclick="changeView('users')" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-user-friends mr-1"></i>Players
                             </button>
+                            <button onclick="changeView('battle')" class="btn-magic px-4 py-2 rounded text-sm">
+                                <i class="fas fa-khanda mr-1"></i>Battle
+                            </button>
+                            <button onclick="changeView('stats')" class="btn-fantasy px-4 py-2 rounded text-sm">
+                                <i class="fas fa-chart-bar mr-1"></i>Stats & XP
+                            </button>
                             <button onclick="showAssignCharModal()" class="btn-fantasy px-4 py-2 rounded text-sm">
                                 <i class="fas fa-user-tag mr-1"></i>Assign Chars
                             </button>

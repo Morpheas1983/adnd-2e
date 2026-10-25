@@ -244,6 +244,7 @@ function castSpell(spellName, spellLevel) {
     char.usedSpellSlots[spellLevel] = used + 1;
     char.lastUpdated = Date.now();
     Storage.save();
+    logCampaignEvent('spell', { spell: spellName, level: spellLevel, charClass: char.class }, char);
 
     let msg = `Cast ${spellName}! ${totalSlots - used - 1} Level ${spellLevel} slot(s) remaining.`;
     if (effect) msg += ` ${effect.name} active for ${effect.duration} ${effect.durationType}.`;
@@ -715,6 +716,7 @@ function castSpellOnTarget(spellName, spellLevel, targetId) {
     caster.lastUpdated = Date.now();
     target.lastUpdated = Date.now();
     Storage.save();
+    logCampaignEvent('spell', { spell: spellName, level: spellLevel, charClass: caster.class, target: target.name }, caster);
     closeModal();
     toast(`${caster.name} cast ${spellName} on ${target.name}: ${effectMsg}!`);
     render();
@@ -883,7 +885,7 @@ const VIEW_MAP = {
     'dm_view': 'dm.html', 'bestiary': 'bestiary.html', 'monsters': 'monsters.html',
     'spells': 'spells.html', 'campaign': 'campaign.html', 'tactical': 'tactical.html',
     'campaigns': 'campaigns.html', 'campaign_detail': 'campaign-detail.html',
-    'users': 'users.html'
+    'users': 'users.html', 'battle': 'battle.html', 'stats': 'stats.html'
 };
 
 function changeView(view) {

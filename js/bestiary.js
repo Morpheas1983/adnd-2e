@@ -30,7 +30,7 @@ function renderBestiary(container) {
                                 </div>
                                 <div class="text-right">
                                     <div class="text-xl font-bold text-amber-900 fantasy-font">AC ${c.ac}</div>
-                                    <div class="text-xs text-amber-700">THAC0 ${c.thac0}</div>
+                                    <div class="text-xs text-amber-700">THAC0 ${c.thac0}${c.hd ? ` · HD ${c.hd}` : ''}${c.xp ? ` · ${c.xp} XP` : ''}</div>
                                 </div>
                             </div>
                             <div class="mb-2">
@@ -89,6 +89,8 @@ function saveCreature(id) {
         maxHp: parseInt($('cMaxHP').value) || 1,
         ac: parseInt($('cAC').value) || 10,
         thac0: parseInt($('cTHAC0').value) || 20,
+        hd: ($('cHD')?.value || '').trim(),
+        xp: parseInt($('cXP')?.value) || 0,
         weapons: $('cWeapons').value.split(',').map(s => {
             const parts = s.trim().split(':');
             return parts.length === 2 ? {name: parts[0].trim(), damage: parts[1].trim()} : null;

@@ -20,20 +20,32 @@ function renderEquippedGear(char) {
     // WEAPONS - show ALL equipped weapons
     if (weapons.length > 0) {
         weapons.forEach((weapon, idx) => {
-            const effTHAC0 = thac0 - (weapon.bonusAttack || 0) - strMod;
-            const effDmgMod = strMod + (weapon.bonusDamage || 0);
+            const a = weaponAttackInfo(char, weapon);
+            const effTHAC0 = a.effTHAC0;
+            const effDmgMod = a.dmgMod;
             const dmgText = effDmgMod > 0 ? `+${effDmgMod}` : (effDmgMod < 0 ? `${effDmgMod}` : '');
+            const parts = [`Base ${a.baseThac0}`];
+            if (weapon.bonusAttack) parts.push(`Magic ${formatMod(weapon.bonusAttack)}`);
+            if (a.strMod) parts.push(`Str ${formatMod(a.strMod)}`);
+            if (a.specHit) parts.push(`Spec +1`);
+            if (a.nonProfPenalty) parts.push(`Not proficient ${a.nonProfPenalty}`);
             html += `
-                <div class="bg-amber-100 rounded p-3 border border-amber-300">
+                <div class="bg-amber-100 rounded p-3 border ${a.proficient ? 'border-amber-300' : 'border-red-400'}">
                     <div class="text-xs text-amber-700 uppercase tracking-wide">Equipped Weapon${weapons.length > 1 ? ' #' + (idx+1) : ''}</div>
                     <div class="font-bold text-amber-900 text-lg">${weapon.name}</div>
+                    <div class="text-xs mt-1">
+                        ${a.specialized ? `<span class="item-bonus"><i class="fas fa-star mr-1"></i>Specialized (${a.prof})</span>`
+                          : a.proficient ? `<span class="text-green-800"><i class="fas fa-check mr-1"></i>Proficient (${a.prof})</span>`
+                          : `<span class="text-red-700 font-bold"><i class="fas fa-exclamation-triangle mr-1"></i>Not proficient${a.prof ? ` in ${a.prof}` : ''}: ${a.nonProfPenalty} to hit</span>`}
+                    </div>
                     <div class="text-sm mt-1">
                         <span class="font-bold">Effective THAC0:</span> ${effTHAC0} 
-                        <span class="text-xs text-amber-600">(Base ${thac0} - Atk ${weapon.bonusAttack||0} - Str ${strMod})</span>
+                        <span class="text-xs text-amber-600">(${parts.join(', ')})</span>
                     </div>
                     <div class="text-sm">
-                        <span class="font-bold">Damage:</span> ${weapon.damage || weapon.damage_sm || '?'} ${dmgText}
+                        <span class="font-bold">Damage:</span> ${weapon.damage || weapon.damage_sm || '?'} ${dmgText}${a.specDmg ? ' <span class="text-xs text-amber-600">(incl. spec +2)</span>' : ''}
                     </div>
+                    <div class="text-sm"><span class="font-bold">Attacks/round:</span> ${a.attacks}</div>
                     ${weapon.special ? `<div class="text-xs text-blue-700 mt-1 font-italic"><i class="fas fa-star mr-1"></i>${weapon.special}</div>` : ''}
                 </div>`;
         });
@@ -115,7 +127,7 @@ function renderSheet(container) {
         effectiveMods[s] = getModifier(effectiveStats[s]);
     });
     const isCaster = ['Mage','Specialist Wizard','Cleric','Druid','Paladin','Ranger','Bard'].includes(char.class);
-    const expected = getExpectedProfs(char.class, char.level);
+    const profSum = charProfSummary(char);
     const wpCount = (char.weaponProfs || []).length;
     const nwpCount = (char.nonweaponProfs || []).length;
 
@@ -420,24 +432,30 @@ function renderSheet(container) {
                             </div>
                         </div>
                         <div class="parchment scroll-border p-4 fade-in">
-                            <div class="section-header"><i class="fas fa-fist-raised"></i>Proficiencies</div>
+                            <div class="section-header justify-between"><span><i class="fas fa-fist-raised mr-2"></i>Proficiencies</span>
+                                ${canWriteChar(char) ? `<button onclick="showManageProfsModal()" class="btn-galactic px-2 py-1 rounded text-xs normal-case"><i class="fas fa-edit mr-1"></i>Manage</button>` : ''}</div>
                             <div class="grid-2 gap-4">
                                 <div>
                                     <div class="flex justify-between items-center mb-2">
                                         <h4 class="font-bold text-amber-900 text-sm">Weapon Profs</h4>
-                                        <span class="text-xs ${wpCount > expected.weapon ? 'text-red-600' : (wpCount < expected.weapon ? 'text-amber-600' : 'text-green-600')}">${wpCount} / ${expected.weapon} expected</span>
+                                        <span class="text-xs ${profSum.weapon.left < 0 ? 'text-red-600' : (profSum.weapon.left > 0 ? 'text-amber-600' : 'text-green-600')}">${profSum.weapon.used} / ${profSum.weapon.total} slots${profSum.weapon.left > 0 ? ` (${profSum.weapon.left} free)` : ''}</span>
                                     </div>
                                     <div class="flex flex-wrap gap-1">
-                                        ${(char.weaponProfs || []).map(p => `<span class="prof-tag">${p}</span>`).join('') || '<span class="text-amber-700 text-sm italic">None selected</span>'}
+                                        ${(char.weaponProfs || []).map(p => `<span class="prof-tag">${p}${(char.weaponSpecs || []).includes(p) && canSpecialize(char.class) ? ' <i class="fas fa-star text-amber-600" title="Specialized: +1 hit, +2 dmg"></i>' : ''}</span>`).join('') || '<span class="text-amber-700 text-sm italic">None selected</span>'}
                                     </div>
+                                    <p class="text-xs text-amber-700 mt-2">Non-proficient weapons: ${profSum.penalty} to hit</p>
                                 </div>
                                 <div>
                                     <div class="flex justify-between items-center mb-2">
                                         <h4 class="font-bold text-amber-900 text-sm">Non-Weapon Profs</h4>
-                                        <span class="text-xs ${nwpCount > expected.nonweapon ? 'text-red-600' : (nwpCount < expected.nonweapon ? 'text-amber-600' : 'text-green-600')}">${nwpCount} / ${expected.nonweapon} expected</span>
+                                        <span class="text-xs ${profSum.nonweapon.left < 0 ? 'text-red-600' : (profSum.nonweapon.left > 0 ? 'text-amber-600' : 'text-green-600')}">${profSum.nonweapon.used} / ${profSum.nonweapon.total} slots${profSum.nonweapon.left > 0 ? ` (${profSum.nonweapon.left} free)` : ''}</span>
                                     </div>
-                                    <div class="flex flex-wrap gap-1">
-                                        ${(char.nonweaponProfs || []).map(p => `<span class="prof-tag">${p}</span>`).join('') || '<span class="text-amber-700 text-sm italic">None selected</span>'}
+                                    <div class="space-y-1">
+                                        ${(char.nonweaponProfs || []).map(p => { const info = nwpInfo(p); const sc = nwpCheckScore(char, p); return `
+                                        <div class="flex items-center justify-between gap-2 text-sm bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                            <span class="text-amber-900">${p} <span class="text-xs text-amber-700">${info.ability !== 'N/A' ? `${info.ability}${formatMod(info.mod)}` : ''}</span></span>
+                                            ${sc === null ? '<span class="text-xs text-amber-700">no roll</span>' : `<button onclick="rollProficiencyCheck('${p.replace(/'/g, "\\'")}')" class="text-xs px-2 py-0.5 rounded bg-amber-700 text-amber-50 whitespace-nowrap" title="Roll d20, succeed on ${sc} or less"><i class="fas fa-dice-d20 mr-1"></i>${sc}</button>`}
+                                        </div>`; }).join('') || '<span class="text-amber-700 text-sm italic">None selected</span>'}
                                     </div>
                                 </div>
                             </div>
@@ -556,35 +574,7 @@ function confirmEditLevel() {
     toast(`Level updated to ${newLevel}, HP set to ${newHP}!`);
 }
 
-function addProfFromModal(type) {
-    const char = State.currentCharacter;
-    const select = $(type === 'weapon' ? 'addWP' : 'addNWP');
-    const val = select.value;
-    if (!val) return;
 
-    if (type === 'weapon') {
-        char.weaponProfs = char.weaponProfs || [];
-        char.weaponProfs.push(val);
-    } else {
-        char.nonweaponProfs = char.nonweaponProfs || [];
-        char.nonweaponProfs.push(val);
-    }
-    Storage.save();
-    showManageProfsModal();
-    toast(`Added ${val}`);
-}
-
-function removeProfFromModal(type, idx) {
-    const char = State.currentCharacter;
-    if (type === 'weapon') {
-        char.weaponProfs.splice(idx, 1);
-    } else {
-        char.nonweaponProfs.splice(idx, 1);
-    }
-    Storage.save();
-    showManageProfsModal();
-    toast('Proficiency removed');
-}
 
 function changeCharacterCampaign(charId, newCampaignId) {
     if (!newCampaignId) return toast('Please select a campaign', 'error');
