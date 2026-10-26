@@ -36,6 +36,29 @@ function getModifier(score) {
     if (score >= 4) return -2;
     return -3;
 }
+// PHB Table 2 (Dexterity). Defensive adjustment: negative is better (lowers AC).
+function dexDefenseAdj(score) {
+    const d = parseInt(score) || 10;
+    if (d <= 3) return 4;
+    if (d <= 6) return 7 - d;          // 4: +3, 5: +2, 6: +1
+    if (d <= 14) return 0;
+    if (d <= 18) return 14 - d;        // 15: -1, 16: -2, 17: -3, 18: -4
+    if (d <= 20) return -4;
+    if (d <= 23) return -5;
+    return -6;
+}
+// Reaction / missile attack adjustment (PHB Table 2)
+function dexReactionAdj(score) {
+    const d = parseInt(score) || 10;
+    if (d <= 3) return -3;
+    if (d <= 5) return d - 6;          // 4: -2, 5: -1
+    if (d <= 15) return 0;
+    if (d === 16) return 1;
+    if (d <= 18) return 2;
+    if (d <= 20) return 3;
+    if (d <= 23) return 4;
+    return 5;
+}
 function formatMod(mod) { return mod >= 0 ? `+${mod}` : `${mod}`; }
 function getTHAC0(className, level) {
     const cls = DB.classes[className];
@@ -55,14 +78,14 @@ function getSave(className, level, saveType) {
     return saves[4];
 }
 function calcAC(char) {
-    const dexMod = getModifier(getModifiedStat(char, 'dex'));
+    const dexAdj = dexDefenseAdj(getModifiedStat(char, 'dex'));   // PHB defensive adjustment
     let baseAC = 10;
-    let totalAC = baseAC - dexMod;
+    let totalAC = baseAC + dexAdj;
 
     const armor = char.inventory?.find(i => i.equipped && i.type === 'armor');
     if (armor) {
         baseAC = armor.ac - (armor.bonusAC || 0);
-        totalAC = baseAC - dexMod;
+        totalAC = baseAC + dexAdj;
     }
 
     const shield = char.inventory?.find(i => i.equipped && i.type === 'shield');
@@ -90,7 +113,7 @@ function calcAC(char) {
 }
 
 function getACBreakdown(char) {
-    const dexMod = getModifier(char.stats?.dex || 10);
+    const dexAdj = dexDefenseAdj(getModifiedStat(char, 'dex'));
     const armor = char.inventory?.find(i => i.equipped && i.type === 'armor');
     const shield = char.inventory?.find(i => i.equipped && i.type === 'shield');
     const otherProtection = char.inventory?.filter(i => 
@@ -102,8 +125,8 @@ function getACBreakdown(char) {
     ) || [];
 
     let parts = [`Base 10`];
-    if (dexMod !== 0) {
-        parts.push(`DEX ${formatMod(dexMod)}`);
+    if (dexAdj !== 0) {
+        parts.push(`DEX ${formatMod(dexAdj)}`);
     }
     if (armor) {
         const armorVal = armor.ac - (armor.bonusAC || 0);
@@ -504,9 +527,10 @@ function getSpellHealingAmount(spellName) {
     const name = spellName.toLowerCase();
     if (name.includes('cure light wounds')) return { amount: () => Math.floor(Math.random() * 8) + 1 };
     if (name.includes('cure moderate wounds')) return { amount: () => Math.floor(Math.random() * 8) + 1 + Math.floor(Math.random() * 8) + 1 + 2 };
-    if (name.includes('cure serious wounds')) return { amount: () => Math.floor(Math.random() * 8) + 1 + Math.floor(Math.random() * 8) + 1 + Math.floor(Math.random() * 8) + 1 };
-    if (name.includes('cure critical wounds')) return { amount: () => Math.floor(Math.random() * 8) + 1 + Math.floor(Math.random() * 8) + 1 + Math.floor(Math.random() * 8) + 1 + Math.floor(Math.random() * 8) + 1 };
-    if (name.includes('heal')) return { amount: () => 'full' };
+    // AD&D 2e: Cure Serious Wounds 2d8+1, Cure Critical Wounds 3d8+3
+    if (name.includes('cure serious wounds')) return { amount: () => rollDie(8) + rollDie(8) + 1 };
+    if (name.includes('cure critical wounds')) return { amount: () => rollDie(8) + rollDie(8) + rollDie(8) + 3 };
+    if (name === 'heal') return { amount: () => 'full' };
     if (name.includes('aid')) return { amount: () => Math.floor(Math.random() * 8) + 1 };
     return null;
 }

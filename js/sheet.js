@@ -11,7 +11,7 @@ function renderEquippedGear(char) {
         (i.bonusAC || 0) !== 0
     ) || [];
     const strMod = getModifier(getModifiedStat(char, 'str'));
-    const dexMod = getModifier(getModifiedStat(char, 'dex'));
+    const dexAdj = dexDefenseAdj(getModifiedStat(char, 'dex'));   // PHB Table 2 defensive adjustment
     const thac0 = getTHAC0(char.class, char.level);
     const effectMods = getEffectMods(char);
 
@@ -86,8 +86,8 @@ function renderEquippedGear(char) {
             </div>`;
             totalReduction += item.bonusAC;
         });
-        if (dexMod !== 0) {
-            acHtml += `<div class="text-xs text-amber-700"><span class="font-bold">DEX Modifier:</span> ${formatMod(dexMod)}</div>`;
+        if (dexAdj !== 0) {
+            acHtml += `<div class="text-xs text-amber-700"><span class="font-bold">DEX defensive adjustment:</span> ${formatMod(dexAdj)}</div>`;
         }
 
         html += `
@@ -97,14 +97,14 @@ function renderEquippedGear(char) {
                 <div class="border-t border-amber-300 mt-2 pt-2 text-sm font-bold">
                     Total AC: ${calcAC(char)}
                 </div>
-                <div class="text-xs text-amber-600 mt-1">Base 10 - ${totalReduction + dexMod} protection = ${calcAC(char)}</div>
+                <div class="text-xs text-amber-600 mt-1">Base 10 - ${totalReduction} protection${dexAdj ? ` ${formatMod(dexAdj)} DEX` : ''}${(getEffectMods(char).ac || 0) ? ` ${formatMod(getEffectMods(char).ac)} effects` : ''} = ${calcAC(char)}</div>
             </div>`;
     } else {
         html += `
             <div class="bg-amber-100 rounded p-3 border border-amber-300 opacity-70">
                 <div class="text-xs text-amber-700 uppercase tracking-wide">Equipped Protection</div>
                 <div class="text-sm text-amber-800 italic">No armor or shield</div>
-                <div class="text-sm">Base AC 10 - DEX ${formatMod(dexMod)} = ${calcAC(char)}</div>
+                <div class="text-sm">Base AC 10${dexAdj ? ` ${formatMod(dexAdj)} DEX (defensive adj.)` : ''} = ${calcAC(char)}</div>
             </div>`;
     }
     html += '</div>';
@@ -214,7 +214,9 @@ function renderSheet(container) {
                                     <div class="stat-box p-2 ${isModified ? 'stat-modified' : ''}">
                                         <div class="stat-label">${s.toUpperCase()}</div>
                                         <div class="stat-value ${isModified ? 'text-amber-700' : ''}">${effVal}${isModified ? `<span class="text-xs ml-1 opacity-70">(${baseVal})</span>` : ''}</div>
-                                        <div class="stat-mod">${formatMod(effectiveMods[s])}</div>
+                                        ${s === 'dex'
+                                            ? `<div class="stat-mod" title="PHB defensive adjustment (AC) and missile attack adjustment">AC ${formatMod(dexDefenseAdj(effVal))} · Missile ${formatMod(dexReactionAdj(effVal))}</div>`
+                                            : `<div class="stat-mod">${formatMod(effectiveMods[s])}</div>`}
                                         ${bd ? `<div class="text-xs text-amber-800 font-bold mt-1">${bd}</div>` : ''}
                                     </div>
                                 `}).join('')}

@@ -306,8 +306,8 @@ function addCombatants() {
     let added = 0;
     document.querySelectorAll('input[name="addPc"]:checked').forEach(cb => {
         const c = State.characters.find(x => x.id === cb.value); if (!c) return;
-        const dexMod = getModifier(getModifiedStat(c, 'dex'));
-        Battle.participants.push({ key: newKey(), kind: 'pc', charId: c.id, name: c.name, init: null, initMod: -dexMod });
+        // AD&D 2e initiative has no Dexterity modifier; the DM can set weapon speed etc. in "Mod"
+        Battle.participants.push({ key: newKey(), kind: 'pc', charId: c.id, name: c.name, init: null, initMod: 0 });
         added++;
     });
     const sameNameCount = name => Battle.participants.filter(p => p.kind === 'npc' && p.baseName === name).length;
