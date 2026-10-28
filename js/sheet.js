@@ -192,7 +192,7 @@ function renderSheet(container) {
                             <button onclick="endTurn(State.currentCharacter)" class="btn-galactic px-3 py-2 rounded text-sm">
                                 <i class="fas fa-hourglass-end mr-1"></i>End Turn
                             </button>
-                            <button onclick="restCharacter(State.currentCharacter)" class="btn-fantasy px-3 py-2 rounded text-sm">
+                            <button onclick="showRestModal([State.currentCharacter.id])" class="btn-fantasy px-3 py-2 rounded text-sm">
                                 <i class="fas fa-bed mr-1"></i>Rest
                             </button>
                             <button onclick="saveCharacter()" class="btn-galactic px-3 py-2 rounded text-sm">
@@ -263,6 +263,7 @@ function renderSheet(container) {
                             </div>
                         </div>
                         ${renderConditionsPanel(char)}
+                        ${renderAbilitiesPanel(char)}
                         <div class="parchment scroll-border p-4 fade-in">
                             <div class="section-header"><i class="fas fa-coins"></i>Wealth</div>
                             <div class="grid grid-cols-2 gap-2 text-sm">
@@ -327,8 +328,8 @@ function renderSheet(container) {
                             <div class="section-header"><i class="fas fa-hat-wizard"></i>Spell Slots</div>
                             <div class="flex justify-between items-center mb-2">
                                 <span class="text-xs text-amber-700">${char.class} Level ${char.level} (${getCasterType(char.class) === 'wizard' ? 'Wizard' : 'Priest'} casting)</span>
-                                <button onclick="restSpells()" class="btn-magic px-3 py-1 rounded text-xs" title="Restore all spell slots after rest">
-                                    <i class="fas fa-bed mr-1"></i>Rest & Restore
+                                <button onclick="showRestModal([State.currentCharacter.id])" class="btn-magic px-3 py-1 rounded text-xs" title="Full, short or custom rest">
+                                    <i class="fas fa-bed mr-1"></i>Rest…
                                 </button>
                             </div>
                             <div class="space-y-3">
@@ -348,7 +349,7 @@ function renderSheet(container) {
                                                 <div class="text-center min-w-[60px]">
                                                     <div class="text-xs text-amber-700 font-bold">Level ${level}</div>
                                                     <div class="text-lg font-bold ${available === 0 ? 'text-red-700' : 'text-amber-900'}">${available} <span class="text-xs font-normal">of ${slots}</span></div>
-                                                    <div class="text-xs text-amber-600">${used > 0 ? used + ' used' : 'Ready'}</div>
+                                                    <div class="text-xs text-amber-600">${used > 0 ? used + ' used' : 'Ready'}${used > 0 && canWriteChar(char) ? ` <button onclick="restoreSpellSlot('${char.id}', ${level})" class="text-purple-800 ml-1" title="Get one level ${level} slot back"><i class="fas fa-undo"></i></button>` : ''}</div>
                                                     <div class="hp-bar mt-1" style="height:4px">
                                                         <div class="hp-fill" style="width: ${pct}%; ${available === 0 ? 'background:#991b1b' : 'background:linear-gradient(90deg, #d4af37, #fbbf24)'}"></div>
                                                     </div>

@@ -489,6 +489,7 @@ function restCharacter(char) {
     if (!char) return;
     char.hp = char.maxHp;
     char.usedSpellSlots = {};
+    (char.abilities || []).forEach(a => { if (a.recharge !== 'manual') a.used = 0; });
     char.activeEffects = effectsAfterRest(char);
     char.conditions = (char.conditions || []).filter(c => !['Fatigued', 'Exhausted', 'Berserking'].includes(c));
     char.lastUpdated = Date.now();

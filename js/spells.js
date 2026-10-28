@@ -66,8 +66,8 @@ function renderSpells(container) {
                     <div class="section-header"><i class="fas fa-hat-wizard"></i>Spell Slots</div>
                     <div class="flex justify-between items-center mb-3">
                         <span class="text-sm text-amber-800">${char.class} Level ${char.level} • Spellcasting: ${getCasterType(char.class) === 'wizard' ? 'Wizard' : 'Priest'}${DB.classes[char.class]?.spell_slots?.offset ? ` • Effective Caster Level ${Math.max(1, char.level - DB.classes[char.class].spell_slots.offset)}` : ''}</span>
-                        <button onclick="restSpells()" class="btn-magic px-4 py-2 rounded text-sm">
-                            <i class="fas fa-bed mr-1"></i>Rest & Restore All Slots
+                        <button onclick="showRestModal([State.currentCharacter.id])" class="btn-magic px-4 py-2 rounded text-sm">
+                            <i class="fas fa-bed mr-1"></i>Rest…
                         </button>
                     </div>
                     <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mb-3">
