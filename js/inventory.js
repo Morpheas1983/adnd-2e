@@ -49,7 +49,7 @@ function renderInventory(container) {
                                             <td class="p-2">
                                                 <div class="font-bold text-amber-900">${item.name}</div>
                                                 <div class="text-xs text-amber-700">
-                                                    ${item.type}${item.damage ? ` • ${item.damage}${item.bonusDamage ? '+'+item.bonusDamage : ''}` : ''}${item.type === 'weapon' ? ` • SF ${weaponSpeed(item)}` : ''}${item.ac ? ` • AC ${item.ac}` : ''}
+                                                    ${item.type}${item.damage ? ` • ${item.damage}${item.bonusDamage ? '+'+item.bonusDamage : ''}` : ''}${item.type === 'weapon' ? ` • <span class="font-bold text-amber-900" title="Speed factor (Edit to change)">Speed ${weaponSpeed(item)}</span>` : ''}${item.ac ? ` • AC ${item.ac}` : ''}
                                                     ${item.bonusAttack ? ` • <span class="item-bonus">Atk +${item.bonusAttack}</span>` : ''}
                                                     ${item.bonusDamage ? ` • <span class="item-bonus">Dmg +${item.bonusDamage}</span>` : ''}
                                                     ${item.bonusAC ? ` • <span class="item-bonus">AC +${item.bonusAC}</span>` : ''}

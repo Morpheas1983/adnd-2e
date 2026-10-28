@@ -346,11 +346,16 @@ function renderSheet(container) {
                                     <div class="label">Hit Mod</div>
                                     ${(() => { const bd = formatEffectBreakdown(getEffectBreakdown(char, 'str')); return bd ? `<div class="text-xs text-green-700 font-bold mt-1">${bd}</div>` : ''; })()}
                                 </div>
-                                <div class="saving-throw-box">
-                                    <div class="value">${effectiveMods.dex}</div>
-                                    <div class="label">Init Mod</div>
-                                    ${(() => { const bd = formatEffectBreakdown(getEffectBreakdown(char, 'dex')); return bd ? `<div class="text-xs text-green-700 font-bold mt-1">${bd}</div>` : ''; })()}
-                                </div>
+                                ${(() => {
+                                    const inv = char.inventory || [];
+                                    const w = inv.find(i => i.equipped && i.type === 'weapon');
+                                    const edit = w && canWriteChar(char);
+                                    return `<div class="saving-throw-box ${edit ? 'cursor-pointer hover:ring-2 hover:ring-amber-500' : ''}" ${edit ? `onclick="showEditItemModal(${inv.indexOf(w)})" title="Click to change the speed factor"` : ''} id="speedFactorBox">
+                                        <div class="value">${w ? weaponSpeed(w) : '–'}</div>
+                                        <div class="label">Speed Factor</div>
+                                        <div class="text-xs text-amber-600 mt-1" style="line-height:1.2">${w ? `${escapeHtml(w.name)}${edit ? ' · <i class="fas fa-edit"></i> change' : ''}` : 'no weapon equipped'}<br>added to initiative</div>
+                                    </div>`;
+                                })()}
                             </div>
                         </div>
 
