@@ -764,8 +764,15 @@ function castSpellOnTarget(spellName, spellLevel, targetId) {
 
 function parseMonsterHD(hdString) {
     if (!hdString || hdString === 'Varies') return { count: 1, die: 8, bonus: 0, text: hdString };
-    // Match patterns like "3", "1+2", "1-1", "3+3", "4-7", "7+7", "11+"
+    // Match patterns like "3", "1+2", "1-1", "3+3", "7+7"; also "4-7" (a range: lowest used), "9 (40 HP)", "9 (d10)", "1/2"
+    hdString = String(hdString).trim();
+    if (/^1\/2/.test(hdString)) return { count: 1, die: 4, bonus: 0, text: hdString };
+    const dieM = hdString.match(/\(d(\d+)\)/);
+    const range = hdString.match(/^(\d+)-(\d+)$/);
+    if (range && parseInt(range[2]) > parseInt(range[1]) && parseInt(range[2]) > 1) hdString = range[1];
+    hdString = hdString.replace(/\s*\(.*\)\s*$/, '').replace(/^(\d+\+\d+)-\d+$/, '$1');
     const match = hdString.match(/^(\d+)(?:([+-])(\d+))?$/);
+    if (match && dieM) return { count: parseInt(match[1]), die: parseInt(dieM[1]), bonus: match[3] ? (match[2] === '+' ? 1 : -1) * parseInt(match[3]) : 0, text: hdString };
     if (!match) return { count: 1, die: 8, bonus: 0, text: hdString };
     const count = parseInt(match[1]);
     const operator = match[2] || '';

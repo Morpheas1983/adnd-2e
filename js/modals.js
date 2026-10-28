@@ -761,6 +761,10 @@ function showMonsterDetail(monsterName, forcedLevel) {
                         <div class="section-header"><i class="fas fa-sword"></i>Combat Stats</div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm mb-3">
                             <div><span class="font-bold text-amber-800">Damage:</span> <span class="text-amber-900">${m.damage}</span></div>
+                            ${m.attacks != null ? `<div><span class="font-bold text-amber-800">No. of attacks:</span> <span class="text-amber-900">${m.attacks}</span></div>` : ''}
+                            ${m.move ? `<div><span class="font-bold text-amber-800">Movement:</span> <span class="text-amber-900">${m.move}</span></div>` : ''}
+                            ${m.morale ? `<div><span class="font-bold text-amber-800">Morale:</span> <span class="text-amber-900">${m.morale}</span></div>` : ''}
+                            ${m.alignment ? `<div><span class="font-bold text-amber-800">Alignment:</span> <span class="text-amber-900">${m.alignment}</span></div>` : ''}
                             <div><span class="font-bold text-amber-800">Size:</span> <span class="text-amber-900">${m.size}</span></div>
                             <div><span class="font-bold text-amber-800">Category:</span> <span class="text-amber-900">${m.category}</span></div>
                             <div><span class="font-bold text-amber-800">Source:</span> <span class="text-amber-900">${m.source}</span></div>

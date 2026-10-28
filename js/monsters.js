@@ -51,6 +51,7 @@ function renderMonsters(container) {
                 <div class="parchment scroll-border p-3 mb-4 fade-in">
                     <div class="text-sm text-amber-800">
                         <span class="font-bold">${filtered.length}</span> of <span class="font-bold">${monsterList.length}</span> monsters
+                        <span class="block text-xs text-amber-700 mt-1"><i class="fas fa-info-circle mr-1"></i>Stats summarized from the 2e Monstrous Manual; descriptions are our own. Check your book for full details.</span>
                         ${selectedCategory !== 'All' ? ` • Category: <span class="font-bold">${selectedCategory}</span>` : ''}
                         ${searchTerm ? ` • Search: "<span class="font-bold">${State.monsterSearch}</span>"` : ''}
                     </div>
@@ -92,7 +93,7 @@ function renderMonsters(container) {
                                 </div>
                             </div>
                             <div class="text-xs text-amber-800 mb-1">
-                                <span class="font-bold">Size:</span> ${m.size} • <span class="font-bold">Source:</span> ${m.source}
+                                <span class="font-bold">Size:</span> ${m.size}${m.move ? ` • <span class="font-bold">MV:</span> ${m.move}` : ''}${m.attacks != null ? ` • <span class="font-bold">#AT:</span> ${m.attacks}` : ''} • <span class="font-bold">Source:</span> ${m.source}
                             </div>
                             <div class="text-xs text-amber-700 truncate">
                                 <span class="font-bold">Damage:</span> ${m.damage}
