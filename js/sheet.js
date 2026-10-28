@@ -151,10 +151,11 @@ function renderSheet(container) {
                                 <select id="moveCampaign" class="input-fantasy text-xs px-2 py-1" style="min-width:140px">
                                     <option value="">-- Select --</option>
                                     ${char.campaignId && char.campaignId !== 'default' ? '<option value="default">Solo (no campaign)</option>' : ''}
-                                    ${Cloud.campaigns.filter(c => c.role && c.role !== 'admin' && c.id !== char.campaignId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}
+                                    ${Cloud.campaigns.filter(c => c.role && c.id !== char.campaignId).map(c => `<option value="${c.id}">${escapeHtml(c.name)}${c.role === 'admin' ? ' (you will join as player)' : c.role === 'dm' ? ' (DM)' : ''}</option>`).join('')}
                                 </select>
                                 <button onclick="changeCharacterCampaign('${char.id}', $('moveCampaign').value)" class="btn-fantasy px-2 py-1 rounded text-xs" title="Move"><i class="fas fa-exchange-alt"></i></button>
-                            </div>` : `<p class="text-xs text-amber-700 mt-1"><i class="fas fa-user mr-1"></i>Player: ${escapeHtml(char.playerName || memberName(char.player))}</p>`}
+                            </div>
+                            <button onclick="joinCampaignFromSheet()" class="text-xs text-amber-700 underline mt-1"><i class="fas fa-key mr-1"></i>Campaign not listed? Join with invite code</button>` : `<p class="text-xs text-amber-700 mt-1"><i class="fas fa-user mr-1"></i>Player: ${escapeHtml(char.playerName || memberName(char.player))}</p>`}
                             </div>
                         </div>
                         <div class="flex gap-2 flex-wrap">
@@ -536,14 +537,35 @@ function confirmEditLevel() {
 
 
 
-function changeCharacterCampaign(charId, newCampaignId) {
+async function changeCharacterCampaign(charId, newCampaignId) {
     if (!newCampaignId) return toast('Please select a campaign', 'error');
     const char = State.characters.find(c => c.id === charId);
     if (!char) return toast('Character not found', 'error');
+    const camp = Cloud.campaigns.find(c => c.id === newCampaignId);
+    if (camp && camp.role === 'admin') {
+        // Admin moving a character into a campaign they are not in yet: join it as a player first
+        try {
+            const uid = State.currentUser;
+            await fs.collection('campaigns').doc(newCampaignId).update({
+                ['members.' + uid]: 'player',
+                memberUids: firebase.firestore.FieldValue.arrayUnion(uid),
+                ['memberNames.' + uid]: State.currentUserName
+            });
+            camp.role = 'player';
+        } catch (err) {
+            console.error(err);
+            return toast('Could not join that campaign.', 'error');
+        }
+    }
     char.campaignId = newCampaignId;
     Storage.save();
     toast(`${char.name} moved to ${newCampaignId === 'default' ? 'Solo play' : campaignNameById(newCampaignId)}`);
     render();
+}
+
+function joinCampaignFromSheet() {
+    const code = prompt('Enter the invite code of the campaign (the campaign\'s DM finds it on the Players page):');
+    if (code) joinCampaign(code);
 }
 
 function confirmChangeClass() {
