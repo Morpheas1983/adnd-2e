@@ -49,7 +49,7 @@ function renderInventory(container) {
                                             <td class="p-2">
                                                 <div class="font-bold text-amber-900">${item.name}</div>
                                                 <div class="text-xs text-amber-700">
-                                                    ${item.type}${item.damage ? ` • ${item.damage}${item.bonusDamage ? '+'+item.bonusDamage : ''}` : ''}${item.ac ? ` • AC ${item.ac}` : ''}
+                                                    ${item.type}${item.damage ? ` • ${item.damage}${item.bonusDamage ? '+'+item.bonusDamage : ''}` : ''}${item.type === 'weapon' ? ` • SF ${weaponSpeed(item)}` : ''}${item.ac ? ` • AC ${item.ac}` : ''}
                                                     ${item.bonusAttack ? ` • <span class="item-bonus">Atk +${item.bonusAttack}</span>` : ''}
                                                     ${item.bonusDamage ? ` • <span class="item-bonus">Dmg +${item.bonusDamage}</span>` : ''}
                                                     ${item.bonusAC ? ` • <span class="item-bonus">AC +${item.bonusAC}</span>` : ''}
@@ -161,6 +161,7 @@ function addCustomItem() {
         item.damage_sm = $('customItemDamageSM').value || '1d6';
         item.damage_l = $('customItemDamageL').value || '1d8';
         item.damage = item.damage_sm;
+        item.speed = $('customItemSpeed') && $('customItemSpeed').value !== '' ? parseInt($('customItemSpeed').value) : 0;
         item.bonusAttack = parseInt($('customItemAtk').value) || undefined;
         item.bonusDamage = parseInt($('customItemDmg').value) || undefined;
     }

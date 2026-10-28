@@ -55,11 +55,14 @@ function renderDMView(container) {
                         </div>
                     </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ${renderBringPanel()}
+                <div id="partyDrop" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 rounded"
+                     ondragover="partyDragOver(event)" ondragleave="partyDragLeave(event)" ondrop="partyDrop(event)">
                     ${campaignChars.length === 0 ? `
                         <div class="col-span-full parchment scroll-border p-8 text-center">
                             <i class="fas fa-scroll text-4xl text-amber-700 mb-3"></i>
                             <p class="fantasy-font text-lg text-amber-900">No characters in this campaign</p>
+                            ${outsideChars().length ? '<p class="text-sm text-amber-700 mt-1">Drag a character here from the list above, or press <b>Bring</b>.</p>' : ''}
                         </div>
                     ` : campaignChars.map(char => `
                         <div class="parchment scroll-border p-4 fade-in cursor-pointer" onclick="loadCharacter('${char.id}')">
@@ -114,6 +117,95 @@ function renderDMView(container) {
     `;
 }
 
+/* ---------- Bring members' characters into this campaign ---------- */
+let outsideCloud = {};          // id -> char, other players' characters the DM may see (dmUids)
+let outsideSubscribed = false;
+let bringOpen = true;
+
+function subscribeOutsideChars() {
+    if (outsideSubscribed || !fs || !State.currentUser) return;
+    outsideSubscribed = true;
+    Cloud.unsubs.push(fs.collection('characters').where('dmUids', 'array-contains', State.currentUser).onSnapshot(snap => {
+        outsideCloud = {};
+        snap.docs.forEach(d => { outsideCloud[d.id] = docToChar(d); });
+        safeRender();
+    }, err => console.error('Members characters error', err)));
+}
+
+// Characters of this campaign's members (and my own) that are in another campaign or solo
+function outsideChars() {
+    const cid = State.campaignId;
+    const members = Cloud.meta?.members || {};
+    const byId = {};
+    Object.values(outsideCloud).forEach(c => { byId[c.id] = c; });
+    (State.characters || []).filter(c => c.player === State.currentUser).forEach(c => { byId[c.id] = c; });
+    return Object.values(byId)
+        .filter(c => c.campaignId !== cid && members[c.player])
+        .sort((a, b) => memberName(a.player).localeCompare(memberName(b.player)) || (a.name || '').localeCompare(b.name || ''));
+}
+
+function whereIs(c) {
+    if (!c.campaignId || c.campaignId === 'default') return 'Solo';
+    const known = Cloud.campaigns.find(x => x.id === c.campaignId);
+    return known ? known.name : 'Another campaign';
+}
+
+function renderBringPanel() {
+    const list = outsideChars();
+    if (!list.length) return '';
+    return `
+        <div class="parchment scroll-border p-4 mb-4 fade-in">
+            <button onclick="bringOpen = !bringOpen; render()" class="w-full flex justify-between items-center text-left">
+                <span class="fantasy-font font-bold text-amber-900"><i class="fas fa-people-arrows mr-2 text-amber-700"></i>Players' characters outside this campaign (${list.length})</span>
+                <i class="fas fa-chevron-${bringOpen ? 'up' : 'down'} text-amber-700"></i>
+            </button>
+            ${bringOpen ? `
+            <p class="text-xs text-amber-700 mt-1 mb-3">Drag a character onto the party below, or press <b>Bring</b>. It leaves its current campaign and joins this one.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                ${list.map(c => `
+                    <div draggable="true" ondragstart="bringDragStart(event, '${c.id}')" data-bring="${c.id}"
+                         class="flex items-center justify-between gap-2 p-2 bg-amber-100 rounded border border-amber-300 cursor-grab">
+                        <div class="min-w-0">
+                            <div class="font-bold text-amber-900 truncate"><i class="fas fa-grip-vertical text-amber-500 mr-1 hidden md:inline"></i>${escapeHtml(c.name || 'Unnamed')}</div>
+                            <div class="text-xs text-amber-700 truncate">${escapeHtml(memberName(c.player))} • ${escapeHtml(c.race || '')} ${escapeHtml(c.class || '')} ${c.level || 1} • <i>${escapeHtml(whereIs(c))}</i></div>
+                        </div>
+                        <button onclick="bringCharacter('${c.id}')" class="btn-fantasy px-3 py-1 rounded text-xs shrink-0"><i class="fas fa-sign-in-alt mr-1"></i>Bring</button>
+                    </div>`).join('')}
+            </div>` : ''}
+        </div>`;
+}
+
+function bringDragStart(e, id) { e.dataTransfer.setData('text/plain', 'bring:' + id); e.dataTransfer.effectAllowed = 'move'; }
+function partyDragOver(e) { e.preventDefault(); $('partyDrop').classList.add('ring-4', 'ring-green-500'); }
+function partyDragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) $('partyDrop').classList.remove('ring-4', 'ring-green-500'); }
+function partyDrop(e) {
+    e.preventDefault();
+    $('partyDrop').classList.remove('ring-4', 'ring-green-500');
+    const v = e.dataTransfer.getData('text/plain') || '';
+    if (v.startsWith('bring:')) bringCharacter(v.slice(6));
+}
+
+async function bringCharacter(id) {
+    const cid = State.campaignId;
+    const c = outsideChars().find(x => x.id === id);
+    if (!c || !cid) return;
+    const from = whereIs(c);
+    if (c.player === State.currentUser) {
+        // my own character: the normal save moves it
+        const mine = State.characters.find(x => x.id === id);
+        mine.campaignId = cid;
+        Storage.save();
+    } else {
+        try {
+            await fs.collection('characters').doc(id).update({ campaignId: cid, updatedAt: serverTime() });
+        } catch (err) {
+            console.error(err);
+            return toast(err.code === 'permission-denied' ? 'Not allowed. The player must be a member of this campaign.' : 'Could not move the character.', 'error');
+        }
+    }
+    toast(`${c.name} joined ${currentCampaignName()} (from ${from})`);
+}
+
 function dmViewCharacter(id) {
     loadCharacter(id);
 }
@@ -166,4 +258,4 @@ function assignCharacterToPlayer(charId, uid) {
 function render() { renderDMView(document.getElementById('app')); }
 
 /* Init */
-bootPage({ campaign: true, dm: true }, () => renderDMView(document.getElementById('app')));
+bootPage({ campaign: true, dm: true }, () => { subscribeOutsideChars(); renderDMView(document.getElementById('app')); });

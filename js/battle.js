@@ -49,11 +49,40 @@ function view(p) {
     return { name: p.name, sub: p.source || 'Creature', hd: p.hd || '—', hp: p.hp, maxHp: p.maxHp, ac: p.ac, thac0: p.thac0, down: p.hp <= 0, dead: !!p.defeated };
 }
 
+/* ---------- Speed factor of what each combatant does this round ---------- */
+// Choices for a character: their weapons (equipped first) and prepared spells
+function actionChoices(c) {
+    if (!c) return [];
+    const weapons = (c.inventory || []).filter(i => i.type === 'weapon').sort((a, b) => (b.equipped ? 1 : 0) - (a.equipped ? 1 : 0));
+    const out = weapons.map(w => ({ id: 'w:' + w.name, label: `${w.name}${w.equipped ? '' : ' (not equipped)'}`, sf: weaponSpeed(w), group: 'Weapons' }));
+    [...new Set(c.preparedSpells || [])].forEach(n => {
+        const sf = spellSpeed(c, n);
+        out.push({ id: 's:' + n, label: n, sf: sf.value === null ? 10 : sf.value, sfLabel: sf.label, group: 'Spells' });
+    });
+    return out;
+}
+function defaultAction(c) {
+    const ch = actionChoices(c);
+    return ch.find(x => x.id.startsWith('w:')) || null;
+}
+// Speed factor used in the initiative roll
+function speedOf(p) {
+    if (p.kind !== 'pc') return parseInt(p.speed) || 0;
+    const c = pcOf(p);
+    const ch = actionChoices(c);
+    const a = p.action === 'other' ? null : (ch.find(x => x.id === p.action) || (p.action ? null : defaultAction(c)));
+    return a ? a.sf : 0;
+}
+function initRoll(p) { return rollDie(10) + speedOf(p) + (p.initMod || 0); }
+function setAction(key, v) { const p = Battle.participants.find(x => x.key === key); if (!p) return; p.action = v; saveBattle(); render(); }
+function setSpeed(key, v) { const p = Battle.participants.find(x => x.key === key); if (!p) return; p.speed = parseInt(v) || 0; saveBattle(); render(); }
+
 function orderedParticipants() {
     return [...Battle.participants].sort((a, b) => {
         const ai = a.init == null ? 999 : a.init, bi = b.init == null ? 999 : b.init;
         if (ai !== bi) return ai - bi;                    // AD&D 2e: lowest initiative acts first
-        if ((a.initMod || 0) !== (b.initMod || 0)) return (a.initMod || 0) - (b.initMod || 0);
+        const am = speedOf(a) + (a.initMod || 0), bm = speedOf(b) + (b.initMod || 0);
+        if (am !== bm) return am - bm;
         return a.name.localeCompare(b.name);
     });
 }
@@ -96,7 +125,7 @@ function renderBattle(container) {
                         <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" class="accent-amber-700" ${Battle.rerollEachRound ? 'checked' : ''} onchange="Battle.rerollEachRound=this.checked; saveBattle();">Re-roll initiative every round</label>
                         ${killsXP ? `<span><i class="fas fa-skull mr-1"></i>XP from defeated creatures: <b>${killsXP}</b></span>` : ''}
                     </div>
-                    <p class="text-xs text-amber-700 mt-1">Initiative: d10 + modifier, <b>lowest acts first</b>. Characters' hit points come straight from their sheets and update live.</p>
+                    <p class="text-xs text-amber-700 mt-1">Initiative: d10 + <b>speed factor</b> of the chosen weapon or spell + modifier, <b>lowest acts first</b>. Spells cast in rounds take effect at the end of the round. Characters' hit points come straight from their sheets and update live.</p>
                 </div>
 
                 ${!order.length ? `
@@ -126,7 +155,7 @@ function battleRow(p, i, pcs) {
             <div class="flex flex-col items-center w-16">
                 <span class="text-xs text-amber-700">Init</span>
                 <input type="number" value="${p.init ?? ''}" placeholder="–" class="input-fantasy w-14 text-center text-lg font-bold px-1 py-1" onchange="setInit('${p.key}', this.value)" aria-label="Initiative">
-                <button onclick="rollInit('${p.key}')" class="text-xs text-amber-800 underline mt-1" title="Roll d10 ${formatMod(p.initMod || 0)}"><i class="fas fa-dice-d20"></i> roll</button>
+                <button onclick="rollInit('${p.key}')" class="text-xs text-amber-800 underline mt-1" title="Roll d10 + speed ${speedOf(p)}${p.initMod ? ' ' + formatMod(p.initMod) : ''}"><i class="fas fa-dice-d20"></i> roll</button>
             </div>
             <div class="flex-1 min-w-[180px]">
                 <div class="flex items-center gap-2 flex-wrap">
@@ -140,7 +169,8 @@ function battleRow(p, i, pcs) {
                     <span title="Hit Dice"><b>HD</b> ${v.hd}</span>
                     <span><b>AC</b> ${v.ac}</span>
                     <span><b>THAC0</b> ${v.thac0}</span>
-                    <span title="Initiative modifier"><b>Mod</b> <input type="number" value="${p.initMod || 0}" class="input-fantasy w-12 text-center px-1 py-0 text-sm" onchange="setInitMod('${p.key}', this.value)"></span>
+                    ${actionHtml(p)}
+                    <span title="Other initiative modifier (surprise, haste, situational...)"><b>Mod</b> <input type="number" value="${p.initMod || 0}" class="input-fantasy w-12 text-center px-1 py-0 text-sm" onchange="setInitMod('${p.key}', this.value)"></span>
                     ${isNpc ? `<span><b>XP</b> <input type="number" value="${p.xp || 0}" class="input-fantasy w-16 text-center px-1 py-0 text-sm" onchange="setXp('${p.key}', this.value)"></span>` : ''}
                 </div>
             </div>
@@ -170,14 +200,31 @@ function battleRow(p, i, pcs) {
     </div>`;
 }
 
+function actionHtml(p) {
+    if (p.kind !== 'pc') return `<span title="Speed factor of the creature's attack (0 for natural attacks)"><b>SF</b> <input type="number" value="${p.speed || 0}" class="input-fantasy w-12 text-center px-1 py-0 text-sm" onchange="setSpeed('${p.key}', this.value)"></span>`;
+    const c = pcOf(p);
+    const ch = actionChoices(c);
+    const cur = p.action || (defaultAction(c) ? defaultAction(c).id : 'other');
+    const groups = ['Weapons', 'Spells'].map(g => {
+        const list = ch.filter(x => x.group === g);
+        return list.length ? `<optgroup label="${g}">${list.map(x => `<option value="${escapeHtml(x.id)}" ${x.id === cur ? 'selected' : ''}>${escapeHtml(x.label)} (SF ${escapeHtml(String(x.sfLabel || x.sf))})</option>`).join('')}</optgroup>` : '';
+    }).join('');
+    return `<span class="flex items-center gap-1 max-w-full" title="What the character does this round: its speed factor is added to initiative">
+        <b>Action</b>
+        <select class="input-fantasy text-xs px-1 py-0 max-w-[11rem]" onchange="setAction('${p.key}', this.value)" aria-label="Action">
+            ${groups}<option value="other" ${cur === 'other' ? 'selected' : ''}>Other / move (SF 0)</option>
+        </select>
+        <span class="text-xs px-1 rounded bg-amber-200 border border-amber-400" title="Speed factor">SF ${speedOf(p)}</span></span>`;
+}
+
 /* ---------- actions ---------- */
 function rollInit(key) {
     const p = Battle.participants.find(x => x.key === key); if (!p) return;
-    p.init = rollDie(10) + (p.initMod || 0);
+    p.init = initRoll(p);
     saveBattle(); render();
 }
 function rollAllInitiative() {
-    Battle.participants.forEach(p => { if (!(p.kind === 'npc' && p.defeated)) p.init = rollDie(10) + (p.initMod || 0); });
+    Battle.participants.forEach(p => { if (!(p.kind === 'npc' && p.defeated)) p.init = initRoll(p); });
     Battle.turnKey = null;
     saveBattle(); render();
     toast('Initiative rolled: lowest goes first');
@@ -197,7 +244,7 @@ function nextTurn() {
     else {
         // New round
         Battle.round = (Battle.round || 1) + 1;
-        if (Battle.rerollEachRound) Battle.participants.forEach(p => { if (!(p.kind === 'npc' && p.defeated)) p.init = rollDie(10) + (p.initMod || 0); });
+        if (Battle.rerollEachRound) Battle.participants.forEach(p => { if (!(p.kind === 'npc' && p.defeated)) p.init = initRoll(p); });
         Battle.turnKey = activeParticipants()[0].key;
         toast(`Round ${Battle.round}${Battle.rerollEachRound ? ': initiative re-rolled' : ''}`);
     }
@@ -306,7 +353,7 @@ function addCombatants() {
     let added = 0;
     document.querySelectorAll('input[name="addPc"]:checked').forEach(cb => {
         const c = State.characters.find(x => x.id === cb.value); if (!c) return;
-        // AD&D 2e initiative has no Dexterity modifier; the DM can set weapon speed etc. in "Mod"
+        // AD&D 2e initiative: d10 + speed factor of the weapon/spell used (+ other modifiers in "Mod")
         Battle.participants.push({ key: newKey(), kind: 'pc', charId: c.id, name: c.name, init: null, initMod: 0 });
         added++;
     });

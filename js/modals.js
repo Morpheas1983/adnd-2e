@@ -4,8 +4,10 @@
 function showSpellDetail(spellName) {
     const char = State.currentCharacter;
     const spells = getAvailableSpells(char);
-    const spell = spells.find(s => s.name === spellName);
+    const spell = spells.find(s => s.name === spellName) || findSpellAny(spellName);
     if (!spell) return;
+    const sf = spellSpeed(char, spell);
+    const canEdit = !!char && canWriteChar(char);
     $('modalContainer').innerHTML = `
         <div class="modal-overlay" onclick="closeModal(event)">
             <div class="modal-content wide" onclick="event.stopPropagation()">
@@ -28,6 +30,11 @@ function showSpellDetail(spellName) {
                         <div class="detail-row"><span class="detail-label">Area:</span><span class="detail-value">${spell.aoe}</span></div>
                         <div class="detail-row"><span class="detail-label">Components:</span><span class="detail-value">${spell.components}</span></div>
                         <div class="detail-row"><span class="detail-label">Casting Time:</span><span class="detail-value">${spell.casting_time}</span></div>
+                        <div class="detail-row items-center"><span class="detail-label">Speed Factor:</span><span class="detail-value flex items-center gap-2 flex-wrap">
+                            ${canEdit ? `<input type="number" id="spellSpeedInput" class="input-fantasy w-16 text-center px-1 py-0" value="${sf.custom ? sf.value : ''}" placeholder="${sf.def.value === null ? '–' : sf.def.value}">
+                            <button onclick="saveSpellSpeed('${spell.name.replace(/'/g, "\\'")}')" class="btn-fantasy px-2 py-0.5 rounded text-xs">Save</button>` : `<b>${escapeHtml(sf.label)}</b>`}
+                            <span class="text-xs text-amber-700">Default ${escapeHtml(sf.def.label)}${sf.def.rounds ? ' (takes effect at the end of the round)' : ''}. Leave empty for the default.</span>
+                        </span></div>
                         <div class="detail-row"><span class="detail-label">Save:</span><span class="detail-value">${spell.save}</span></div>
                     </div>
                     <div class="p-4 bg-amber-50 rounded border border-amber-300">
@@ -41,6 +48,17 @@ function showSpellDetail(spellName) {
             </div>
         </div>
     `;
+}
+
+function saveSpellSpeed(name) {
+    const char = State.currentCharacter;
+    if (!char) return;
+    const v = $('spellSpeedInput').value.trim();
+    setSpellSpeed(char, name, v === '' ? '' : parseInt(v));
+    Storage.save();
+    toast(v === '' ? `${name}: speed factor back to default` : `${name}: speed factor ${parseInt(v)}`);
+    closeModal();
+    if (typeof render === 'function') render();
 }
 
 let selectedAddItem = null;
@@ -144,6 +162,10 @@ function showAddItemModal() {
                                     <div>
                                         <label class="block text-sm font-bold text-amber-900 mb-1">Damage (L)</label>
                                         <input type="text" id="customItemDamageL" class="input-fantasy w-full px-3 py-2" placeholder="1d8">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-bold text-amber-900 mb-1">Speed Factor</label>
+                                        <input type="number" id="customItemSpeed" class="input-fantasy w-full px-3 py-2 text-center" value="5">
                                     </div>
                                 </div>
                             </div>
@@ -337,9 +359,16 @@ function showEditItemModal(idx) {
                                 <input type="number" id="editItemDmg" class="input-fantasy w-full px-3 py-2 text-center" value="${item.bonusDamage || 0}">
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-bold text-amber-900 mb-1">Damage Dice</label>
-                            <input type="text" id="editItemDamage" class="input-fantasy w-full px-3 py-2" value="${item.damage || item.damage_sm || ''}">
+                        <div class="grid-2 gap-3">
+                            <div>
+                                <label class="block text-sm font-bold text-amber-900 mb-1">Damage Dice</label>
+                                <input type="text" id="editItemDamage" class="input-fantasy w-full px-3 py-2" value="${item.damage || item.damage_sm || ''}">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-amber-900 mb-1">Speed Factor</label>
+                                <input type="number" id="editItemSpeed" class="input-fantasy w-full px-3 py-2 text-center" value="${weaponSpeed(item)}">
+                                <p class="text-xs text-amber-700 mt-1">PHB: ${dbWeapon(item) ? dbWeapon(item).speed : '–'}. Added to initiative.</p>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-amber-900 mb-1">Weapon Proficiency</label>
@@ -405,6 +434,10 @@ function saveItemEdit(idx) {
             item.damage = $('editItemDamage').value.trim() || item.damage;
             if (item.bonusAttack === 0 || item.bonusAttack === undefined) delete item.bonusAttack;
             if (item.bonusDamage === 0 || item.bonusDamage === undefined) delete item.bonusDamage;
+            const sp = $('editItemSpeed') ? $('editItemSpeed').value.trim() : '';
+            const dbw = dbWeapon(item);
+            if (sp === '' || isNaN(parseInt(sp)) || (dbw && parseInt(sp) === dbw.speed)) delete item.speed;   // back to the PHB value
+            else item.speed = parseInt(sp);
             const prof = $('editItemProf')?.value;
             if (prof) item.profName = prof; else delete item.profName;
         }

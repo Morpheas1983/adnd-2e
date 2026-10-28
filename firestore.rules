@@ -120,6 +120,8 @@ service cloud.firestore {
       allow read: if signedIn() && (
         resource.data.ownerUid == uid()
         || isAdmin()
+        // DMs of campaigns the owner plays in (listed by the owner) may see it, to bring it into their campaign
+        || uid() in resource.data.get('dmUids', [])
         || (inCampaign(resource.data) && isMember(resource.data.campaignId)));
 
       allow create: if signedIn()
@@ -140,6 +142,10 @@ service cloud.firestore {
         || (inCampaign(resource.data) && isDM(resource.data.campaignId)
           && request.resource.data.campaignId == resource.data.campaignId
           && request.resource.data.ownerUid in campaignData(resource.data.campaignId).members)
+        // A DM brings a character of one of their campaign's members into that campaign (from anywhere)
+        || (inCampaign(request.resource.data) && isDM(request.resource.data.campaignId)
+          && resource.data.ownerUid in campaignData(request.resource.data.campaignId).members
+          && changed().hasOnly(['campaignId', 'updatedAt']))
         // Campaign deleted by its owner: characters become solo
         || (inCampaign(resource.data) && !existsAfter(campaignPath(resource.data.campaignId))
           && changed().hasOnly(['campaignId']) && request.resource.data.campaignId == null)

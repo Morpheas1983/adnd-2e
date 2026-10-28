@@ -158,6 +158,7 @@ const Cloud_start = async function () {
     rebuildCharacters();
     restoreCurrentCharacter();
     Cloud.ready = true;
+    syncToCloud();   // keeps the list of DMs who may see my characters up to date
     await handlePendingJoin();
 };
 
@@ -168,9 +169,13 @@ async function loadCampaignList() {
         const unsub = q.onSnapshot(snap => {
             Cloud.campaigns = snap.docs.map(d => {
                 const x = d.data();
-                return { id: d.id, name: x.name || 'Unnamed campaign', ownerUid: x.ownerUid, role: (x.members || {})[State.currentUser] || (Cloud.isAdmin ? 'admin' : null) };
+                return { id: d.id, name: x.name || 'Unnamed campaign', ownerUid: x.ownerUid, role: (x.members || {})[State.currentUser] || (Cloud.isAdmin ? 'admin' : null),
+                    dms: Object.keys(x.members || {}).filter(u => x.members[u] === 'dm') };
             }).sort((a, b) => a.name.localeCompare(b.name));
-            if (first) { first = false; resolve(); } else if (currentPage() === 'dashboard') safeRender();
+            if (first) { first = false; resolve(); } else {
+                if (Cloud.ready) syncToCloud();   // DMs of my campaigns may have changed: refresh who can see my characters
+                if (currentPage() === 'dashboard') safeRender();
+            }
         }, err => { console.error('Campaign list error', err); resolve(); });
         Cloud.unsubs.push(unsub);
     });
@@ -184,15 +189,25 @@ function docToChar(d) {
     c.player = x.ownerUid;
     c.playerName = x.playerName || c.playerName || '';
     c.campaignId = x.campaignId || 'default';
+    c._dm = (x.dmUids || []).slice().sort().join(',');
     return c;
+}
+
+/* DMs of every campaign I play in. They may see my characters (even ones in other campaigns or solo)
+   so they can bring them into their campaign. */
+function myDmUids() {
+    const set = new Set();
+    Cloud.campaigns.filter(c => c.role === 'dm' || c.role === 'player').forEach(c => (c.dms || []).forEach(u => set.add(u)));
+    set.delete(State.currentUser);
+    return [...set].sort();
 }
 function charPayload(c) {
     const copy = clean(c);
     delete copy.lastUpdated;
-    delete copy.player; delete copy.playerName; delete copy.campaignId; delete copy.id;
+    delete copy.player; delete copy.playerName; delete copy.campaignId; delete copy.id; delete copy._dm;
     return JSON.stringify(copy);
 }
-function charKey(c) { return 'char:' + c.id + ':' + (c.player || '') + ':' + (c.campaignId || 'default'); }
+function charKey(c, dm) { return 'char:' + c.id + ':' + (c.player || '') + ':' + (c.campaignId || 'default') + ':' + (dm || ''); }
 
 function subscribeMyCharacters() {
     return new Promise(resolve => {
@@ -224,7 +239,7 @@ function rebuildCharacters() {
     const all = { ...Cloud.charsMine, ...Cloud.charsCampaign };
     // Record what the server has, so Storage.save only writes what really changed
     Object.keys(Cloud.synced).filter(k => k.startsWith('c:')).forEach(k => delete Cloud.synced[k]);
-    Object.values(all).forEach(c => { Cloud.synced['c:' + c.id] = { payload: charPayload(c), key: charKey(c) }; });
+    Object.values(all).forEach(c => { Cloud.synced['c:' + c.id] = { payload: charPayload(c), key: charKey(c, c.player === State.currentUser ? c._dm : '') }; });
     // Keep local characters that haven't been uploaded yet (just created, or offline)
     const pending = (State.characters || []).filter(c => !all[c.id] && c._pending);
     State.characters = [...Object.values(all), ...pending];
@@ -317,7 +332,10 @@ function subscribePrivate(cid) {
 /* ---------- Saving: send only what changed ---------- */
 function canWriteChar(c) {
     if (Cloud.isAdmin) return true;
-    if (!c.player || c.player === State.currentUser) return true;
+    if (!c.player || c.player === State.currentUser) {
+        // my character, but sitting in a campaign I was removed from: the server would refuse the write
+        return !c.campaignId || c.campaignId === 'default' || !!Cloud.campaigns.find(x => x.id === c.campaignId && x.role);
+    }
     return c.campaignId && c.campaignId !== 'default' && isCampaignDM(c.campaignId);
 }
 
@@ -343,20 +361,25 @@ function syncToCloud() {
         if (!c.campaignId) c.campaignId = State.campaignId || 'default';
         const prev = Cloud.synced['c:' + c.id];
         const payload = charPayload(c);
-        const key = charKey(c);
+        const mine = c.player === State.currentUser;
+        const dmUids = mine ? myDmUids() : null;
+        const key = charKey(c, mine ? dmUids.join(',') : '');
         if (prev && prev.payload === payload && prev.key === key) return;
         if (!canWriteChar(c)) return;
         const owner = c.player;
         const playerName = owner === State.currentUser ? State.currentUserName : (c.playerName || memberName(owner));
         c.playerName = playerName;
-        batch.set(fs.collection('characters').doc(c.id), {
+        const doc = {
             ownerUid: owner,
             campaignId: c.campaignId && c.campaignId !== 'default' ? c.campaignId : null,
             name: c.name || 'Unnamed',
             playerName,
             data: payload,
             updatedAt: serverTime()
-        });
+        };
+        if (mine) { doc.dmUids = dmUids; c._dm = dmUids.join(','); }
+        // merge: a DM's save keeps the owner's dmUids list
+        batch.set(fs.collection('characters').doc(c.id), doc, { merge: true });
         Cloud.synced['c:' + c.id] = { payload, key };
         delete c._pending;
         writes++;

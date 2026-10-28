@@ -47,6 +47,8 @@ function renderEquippedGear(char) {
                         <span class="font-bold">Damage:</span> ${weapon.damage || weapon.damage_sm || '?'} ${dmgText}${a.specDmg ? ' <span class="text-xs text-amber-600">(incl. spec +2)</span>' : ''}
                     </div>
                     <div class="text-sm"><span class="font-bold">Attacks/round:</span> ${a.attacks}</div>
+                    <div class="text-sm"><span class="font-bold">Speed factor:</span> ${weaponSpeed(weapon)}${dbWeapon(weapon) && weaponSpeed(weapon) !== dbWeapon(weapon).speed ? ` <span class="text-xs text-amber-600">(PHB ${dbWeapon(weapon).speed})</span>` : ''}
+                        ${canWriteChar(char) ? `<button onclick="showEditItemModal(${(char.inventory || []).indexOf(weapon)})" class="text-xs text-blue-700 underline ml-1" title="Change speed factor"><i class="fas fa-edit"></i></button>` : ''}</div>
                     ${weapon.special ? `<div class="text-xs text-blue-700 mt-1 font-italic"><i class="fas fa-star mr-1"></i>${weapon.special}</div>` : ''}
                 </div>`;
         });
@@ -398,6 +400,7 @@ function renderSheet(container) {
                                                                     title="Cast ${name}">
                                                                     <i class="fas fa-fire mr-1"></i>${name}
                                                                 </button>
+                                                                <button onclick="showSpellDetail('${name}')" title="Details / change speed factor">${speedBadge(spellSpeed(char, name))}</button>
                                                                 ${available > 0 && isSpellTargetable(name) ? `
                                                                 <button onclick="showSpellTargetModal('${name}', ${level})" 
                                                                     class="btn-magic px-2 py-1 rounded text-xs" title="Cast on another">

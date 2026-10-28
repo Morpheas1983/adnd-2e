@@ -1007,3 +1007,50 @@ function dmViewCharacter(id) {
 
 
 
+
+/* ---------- Speed factors (PHB ch. 9: initiative = d10 + speed factor + modifiers, lowest acts first) ---------- */
+function dbWeapon(item) {
+    const n = (item && (item.baseName || item.name)) || '';
+    return (DB.weapons || []).find(w => w.name === n) || null;
+}
+// Speed factor of an inventory weapon: the item's own value (editable), else the PHB table value
+function weaponSpeed(item) {
+    if (!item) return 0;
+    if (item.speed !== undefined && item.speed !== null && item.speed !== '' && !isNaN(item.speed)) return parseInt(item.speed);
+    const w = dbWeapon(item);
+    return w && w.speed != null ? w.speed : 0;
+}
+// Default speed factor from a spell's casting time: "3" -> 3; rounds -> acts at the end of the round (10)
+function spellSpeedDefault(spell) {
+    const ct = String((spell && spell.casting_time) || '').trim().toLowerCase();
+    let m = ct.match(/^(\d+)\s*(seg|segments?)?$/);
+    if (m) return { value: parseInt(m[1]), label: m[1] };
+    m = ct.match(/^(\d+)\s*(rd|rds|round|rounds)\b/);
+    if (m) return { value: 10, label: m[1] + ' rd', rounds: parseInt(m[1]) };
+    if (!ct || ct === 'special') return { value: 0, label: 'special' };
+    return { value: null, label: ct };   // turns / hours: not a combat action
+}
+function findSpellAny(name) {
+    const all = [...(DB.wizard_spells || []), ...(DB.priest_spells || []),
+        ...((State.customSpells && State.customSpells.wizard) || []), ...((State.customSpells && State.customSpells.priest) || [])];
+    return all.find(s => s.name === name) || null;
+}
+// Speed factor for this character's spell: their own override (editable), else from the casting time
+function spellSpeed(char, spellOrName) {
+    const spell = typeof spellOrName === 'string' ? findSpellAny(spellOrName) : spellOrName;
+    const name = typeof spellOrName === 'string' ? spellOrName : (spell && spell.name);
+    const over = char && char.spellSpeeds ? char.spellSpeeds[name] : undefined;
+    const def = spellSpeedDefault(spell);
+    if (over !== undefined && over !== null && over !== '') return { value: parseInt(over), label: String(parseInt(over)), custom: true, def };
+    return { ...def, custom: false, def };
+}
+function speedBadge(sf, extraClass) {
+    const txt = sf.value === null ? sf.label : sf.label;
+    return `<span class="text-xs px-1 rounded bg-amber-200 text-amber-900 border border-amber-400 ${extraClass || ''}" title="Speed factor${sf.custom ? ' (changed)' : ''}: added to the initiative roll">SF ${escapeHtml(String(txt))}${sf.custom ? '*' : ''}</span>`;
+}
+function setSpellSpeed(char, name, value) {
+    char.spellSpeeds = char.spellSpeeds || {};
+    if (value === '' || value === null || isNaN(value)) delete char.spellSpeeds[name];
+    else char.spellSpeeds[name] = parseInt(value);
+    if (!Object.keys(char.spellSpeeds).length) delete char.spellSpeeds;
+}

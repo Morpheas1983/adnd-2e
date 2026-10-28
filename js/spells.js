@@ -130,6 +130,7 @@ function renderSpells(container) {
                                     <span class="spell-name">${spell.name}</span>
                                     <span class="spell-level-badge">${spell.level}</span>
                                     <span class="school-badge">${spell.school || spell.sphere}</span>
+                                    <button onclick="event.stopPropagation(); showSpellDetail('${spell.name}')" title="Details / change speed factor">${speedBadge(spellSpeed(char, spell))}</button>
                                     ${isPrepared ? '<i class="fas fa-check-circle text-blue-400"></i>' : ''}
                                     ${isPrepared ? `<button onclick="event.stopPropagation(); castSpell('${spell.name}', ${spell.level})" class="ml-auto btn-fantasy px-2 py-1 rounded text-xs" title="Cast Spell"><i class="fas fa-fire"></i> Cast</button>` : ''}
                                 </div>
@@ -176,6 +177,7 @@ function renderSpells(container) {
                                         <div class="flex items-center gap-2 flex-1 min-w-0">
                                             <span class="spell-name truncate">${spell.name}</span>
                                             <span class="school-badge">${spell.school || spell.sphere}</span>
+                                            ${speedBadge(spellSpeed(char, spell), 'shrink-0')}
                                         </div>
                                         <div class="flex items-center gap-2">
                                             ${blocked ? `<span class="text-xs text-red-700 font-bold" title="${intBlocked ? 'INT too low for this level' : 'Max spells reached for this level'}"><i class="fas fa-lock"></i></span>` : ''}
