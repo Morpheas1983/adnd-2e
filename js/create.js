@@ -224,17 +224,7 @@ function nextStep() {
     if (createStep === 2) {
         if (!$('charClass').value) return toast('Please select a class', 'error');
         const cls = $('charClass').value;
-        const isCaster = ['Mage','Specialist Wizard','Bard','Cleric','Druid','Paladin','Ranger'].includes(cls);
-        if (isCaster) {
-            const isWizard = ['Mage','Specialist Wizard','Bard'].includes(cls);
-            if (isWizard) {
-                const schools = Array.from(document.querySelectorAll('input[name="wizardSchool"]:checked')).map(cb => cb.value);
-                if (schools.length === 0) return toast('Please select at least one school of magic', 'error');
-            } else {
-                const spheres = Array.from(document.querySelectorAll('input[name="priestSphere"]:checked')).map(cb => cb.value);
-                if (spheres.length === 0) return toast('Please select at least one sphere of influence', 'error');
-            }
-        }
+        if (cls === 'Specialist Wizard' && !SPECIALISTS[$('charKit').value]) return toast('Choose your specialty (kit) first', 'error');
     }
     if (createStep === 3) {
         const race = $('charRace').value;
@@ -507,8 +497,9 @@ function finishCreation() {
     const profProblem = profStepProblem();
     if (profProblem) return toast('Proficiencies: ' + profProblem, 'error');
     const { weaponProfs, weaponSpecs, nonweaponProfs, customs } = ProfPicker.value($('profPicker'));
-    const selectedSchools = Array.from(document.querySelectorAll('input[name="wizardSchool"]:checked')).map(cb => cb.value);
-    const selectedSpheres = Array.from(document.querySelectorAll('input[name="priestSphere"]:checked')).map(cb => cb.value);
+    const accPreview = magicAccess({ class: cls, kit: kit || 'None' });
+    const selectedSchools = accPreview && accPreview.kind === 'wizard' ? WIZARD_SCHOOLS.filter(x => !accPreview.opposed.includes(x)) : [];
+    const selectedSpheres = accPreview && accPreview.kind === 'priest' ? accPreview.major.concat(accPreview.minor) : [];
 
     const char = {
         id: Date.now().toString(36) + Math.random().toString(36).substr(2),
@@ -540,62 +531,15 @@ function finishCreation() {
 }
 
 function updateSchoolSphereSelection() {
+    // Schools and spheres follow the PHB automatically (see js/magic.js); this just shows them
     const cls = $('charClass').value;
-    const alignment = $('charAlignment').value;
     const container = $('schoolSphereSelection');
     const content = $('schoolSphereContent');
-
     if (!cls || !container || !content) return;
-
-    const isWizard = ['Mage', 'Specialist Wizard', 'Bard'].includes(cls);
-    const isPriest = ['Cleric', 'Druid', 'Paladin', 'Ranger'].includes(cls);
-
-    if (!isWizard && !isPriest) {
-        container.classList.add('hidden');
-        return;
-    }
-
+    const preview = { class: cls, kit: $('charKit')?.value || 'None', stats: { wis: parseInt($('stat_wis')?.value) || 10 }, activeEffects: [] };
+    if (!magicAccess(preview)) { container.classList.add('hidden'); return; }
     container.classList.remove('hidden');
-
-    if (isWizard) {
-        const schools = getAvailableSchools(alignment);
-        const isSpecialist = cls === 'Specialist Wizard';
-        const kit = $('charKit')?.value;
-        const kitSchool = kit && kit !== 'None' ? kit : null;
-
-        if (isSpecialist && kitSchool) {
-            content.innerHTML = `
-                <p class="text-xs text-amber-700 mb-2">Your specialty school is determined by your kit: <strong>${kitSchool}</strong>.</p>
-                <input type="hidden" name="wizardSchool" value="${kitSchool}">
-            `;
-            return;
-        }
-
-        content.innerHTML = `
-            <p class="text-xs text-amber-700 mb-2">${isSpecialist ? 'Select your specialty school (choose a kit first):' : 'Select the schools of magic you have access to:'}</p>
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                ${schools.map(s => `
-                    <label class="flex items-center gap-2 cursor-pointer p-2 hover:bg-amber-200 rounded">
-                        <input type="${isSpecialist ? 'radio' : 'checkbox'}" name="wizardSchool" value="${s}" class="accent-amber-700">
-                        <span class="text-sm">${s}</span>
-                    </label>
-                `).join('')}
-            </div>
-        `;
-    } else {
-        const spheres = getAvailableSpheres(alignment);
-        content.innerHTML = `
-            <p class="text-xs text-amber-700 mb-2">Select the spheres of influence you have access to:</p>
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-                ${spheres.map(s => `
-                    <label class="flex items-center gap-2 cursor-pointer p-2 hover:bg-amber-200 rounded">
-                        <input type="checkbox" name="priestSphere" value="${s}" class="accent-amber-700">
-                        <span class="text-sm">${s}</span>
-                    </label>
-                `).join('')}
-            </div>
-        `;
-    }
+    content.innerHTML = magicAccessHtml(preview) + (cls === 'Specialist Wizard' && !SPECIALISTS[preview.kit] ? '<p class="text-xs text-red-700 mt-1">Choose a specialty (kit) above.</p>' : '');
 }
 
 function render() { renderCreate(document.getElementById('app')); }

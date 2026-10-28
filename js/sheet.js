@@ -363,7 +363,7 @@ function renderSheet(container) {
                                 </button>
                             </div>
                             <div class="space-y-3">
-                                ${getSpellSlots(char.class, char.level).map((slots, idx) => {
+                                ${spellSlotsFor(char).slots.map((slots, idx) => {
                                     const level = idx + 1;
                                     const used = (char.usedSpellSlots || {})[level] || 0;
                                     const available = slots - used;
@@ -410,28 +410,12 @@ function renderSheet(container) {
                                     `;
                                 }).join('')}
                             </div>
-                            ${!getSpellSlots(char.class, char.level).length ? '<p class="text-xs text-amber-700 italic mt-2">No spell slots at this level yet.</p>' : ''}
+                            ${!spellSlotsFor(char).slots.length ? '<p class="text-xs text-amber-700 italic mt-2">No spell slots at this level yet.</p>' : ''}
                         </div>
                         ` : ''}
 
-                        <div class="parchment scroll-border p-4 fade-in">
-                            <div class="section-header"><i class="fas fa-dice-d20"></i>Saving Throws</div>
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                ${['ppdm','rsw','pp','bw','sp'].map(s => {
-                                    const baseSave = getSave(char.class, char.level, s);
-                                    const modSave = getModifiedSave(char, s);
-                                    const isModified = modSave !== baseSave;
-                                    return `
-                                    <div class="saving-throw-box">
-                                        <div class="value ${isModified ? 'text-green-700' : ''}">${modSave}${isModified ? `<span class="text-xs ml-1 opacity-70">(${baseSave})</span>` : ''}</div>
-                                        <div class="label">${s.toUpperCase()}</div>
-                                        ${(() => { const bd = formatEffectBreakdown(getEffectBreakdown(char, 'saves')); return bd ? `<div class="text-xs text-green-700 font-bold mt-1">${bd}</div>` : ''; })()}
-                                    </div>
-                                `}).join('')}
-                            </div>
-                            <div class="text-xs text-amber-700 mt-2 text-center">
-                                PPDM = Paralyze/Poison/Death Magic | RSW = Rod/Staff/Wand | PP = Petrification/Polymorph | BW = Breath Weapon | SP = Spell
-                            </div>
+                        <div class="parchment scroll-border p-4 fade-in" id="savesPanel">
+                            ${renderSavesPanel(char)}
                         </div>
                         <div class="parchment scroll-border p-4 fade-in" id="profPanel">
                             ${renderProfPanel(char, profSum)}
@@ -449,13 +433,11 @@ function renderSheet(container) {
                             </div>
                         </div>
                         ` : ''}
-                        ${(char.selectedSchools && char.selectedSchools.length) || (char.selectedSpheres && char.selectedSpheres.length) ? `
+                        ${magicAccess(char) ? `
                         <div class="parchment scroll-border p-4 fade-in">
-                            <div class="section-header"><i class="fas fa-hat-wizard"></i>Magic ${char.selectedSchools && char.selectedSchools.length ? 'Schools' : 'Spheres'}</div>
-                            <div class="flex flex-wrap gap-1">
-                                ${(char.selectedSchools || []).map(s => `<span class="prof-tag">${s}</span>`).join('')}
-                                ${(char.selectedSpheres || []).map(s => `<span class="prof-tag">${s}</span>`).join('')}
-                            </div>
+                            <div class="section-header justify-between"><span><i class="fas fa-hat-wizard mr-2"></i>${magicAccess(char).kind === 'wizard' ? 'Schools of Magic' : 'Spheres of Influence'}</span>
+                                ${canWriteChar(char) ? `<button onclick="showMagicAccessModal()" class="btn-galactic px-2 py-1 rounded text-xs normal-case"><i class="fas fa-edit mr-1"></i>Change</button>` : ''}</div>
+                            ${magicAccessHtml(char)}
                         </div>
                         ` : ''}
                         <div class="parchment scroll-border p-4 fade-in">
@@ -688,4 +670,101 @@ function removeProf(kind, name) {
     Storage.save();
     render();
     toast(`${name} removed`);
+}
+
+/* ---------- Saving throws panel ---------- */
+function renderSavesPanel(char) {
+    const edit = canWriteChar(char);
+    const short = { ppdm: 'PPDM', rsw: 'RSW', pp: 'PP', bw: 'BW', sp: 'SP' };
+    return `
+        <div class="section-header justify-between"><span><i class="fas fa-dice-d20 mr-2"></i>Saving Throws</span>
+            ${edit ? `<button onclick="showSavesModal()" class="btn-galactic px-2 py-1 rounded text-xs normal-case"><i class="fas fa-sliders-h mr-1"></i>Adjust</button>` : ''}</div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            ${SAVE_TYPES.map(t => {
+                const d = getSaveDetails(char, t);
+                const changed = d.final !== d.base;
+                return `
+                <div class="saving-throw-box">
+                    <div class="value ${d.override != null ? 'text-purple-800' : changed ? 'text-green-700' : ''}">${d.final}${changed ? `<span class="text-xs ml-1 opacity-70">(${d.base})</span>` : ''}</div>
+                    <div class="label" title="${SAVE_NAMES[t]}">${short[t]}</div>
+                    ${d.parts.length ? `<div class="text-[11px] text-green-800 mt-1">${d.parts.map(p => `${escapeHtml(p.label)} ${formatMod(p.value)}`).join(', ')}</div>` : ''}
+                    ${d.override != null ? '<div class="text-[11px] text-purple-800 mt-1"><i class="fas fa-lock mr-1"></i>set by hand</div>' : ''}
+                    ${d.notes.length ? `<div class="text-[11px] text-amber-700 mt-1">${d.notes.map(escapeHtml).join('; ')}</div>` : ''}
+                    <button onclick="rollSave('${t}')" class="text-xs mt-1 px-2 py-0.5 rounded bg-amber-700 text-amber-50" title="Roll d20: ${d.final} or more saves"><i class="fas fa-dice-d20 mr-1"></i>Roll</button>
+                </div>`; }).join('')}
+        </div>
+        <div class="text-xs text-amber-700 mt-2 text-center">
+            Roll d20 equal to or higher than the number. PPDM = Paralyzation/Poison/Death Magic · RSW = Rod/Staff/Wand · PP = Petrification/Polymorph · BW = Breath Weapon · SP = Spell
+        </div>`;
+}
+
+function rollSave(t) {
+    const char = State.currentCharacter;
+    const d = getSaveDetails(char, t);
+    const r = rollDie(20);
+    const ok = r >= d.final;
+    toast(`${SAVE_NAMES[t]}: rolled ${r} vs ${d.final}: ${ok ? 'Saved!' : 'Failed'}`, ok ? 'success' : 'error');
+}
+
+function showSavesModal() {
+    const char = State.currentCharacter;
+    const adj = char.saveAdjust || {}, ov = char.saveOverride || {};
+    $('modalContainer').innerHTML = `
+        <div class="modal-overlay" onclick="closeModal(event)">
+            <div class="modal-content wide" onclick="event.stopPropagation()">
+                <div class="p-6">
+                    <h2 class="fantasy-font text-xl font-bold text-amber-900 mb-1">Adjust Saving Throws</h2>
+                    <p class="text-sm text-amber-700 mb-3">Base numbers come from the PHB table for a level ${char.level} ${escapeHtml(char.class)}.
+                        <b>Adjustment</b> adds a bonus (+) or penalty (−), e.g. +1 for a Ring of Protection +1. <b>Set to</b> replaces the number completely; leave it empty to calculate it.</p>
+                    <div class="overflow-x-auto">
+                    <table class="w-full text-sm min-w-[520px]">
+                        <thead><tr class="text-left text-amber-800"><th>Saving throw</th><th class="text-center">Base</th><th class="text-center">Race/Class/Effects</th><th class="text-center">Adjustment</th><th class="text-center">Set to</th><th class="text-center">Result</th></tr></thead>
+                        <tbody>
+                        ${SAVE_TYPES.map(t => { const d = getSaveDetails(char, t); const auto = d.parts.filter(p => p.label !== 'Adjustment').reduce((n, p) => n + p.value, 0); return `
+                        <tr class="border-t border-amber-200">
+                            <td class="py-2"><b>${SAVE_NAMES[t]}</b></td>
+                            <td class="text-center">${d.base}</td>
+                            <td class="text-center">${auto ? formatMod(auto) : '—'}</td>
+                            <td class="text-center"><input type="number" id="sadj_${t}" value="${adj[t] || ''}" placeholder="0" class="input-fantasy w-16 text-center px-1 py-1" oninput="previewSaves()"></td>
+                            <td class="text-center"><input type="number" id="sov_${t}" value="${ov[t] ?? ''}" placeholder="auto" min="1" max="20" class="input-fantasy w-16 text-center px-1 py-1" oninput="previewSaves()"></td>
+                            <td class="text-center font-bold text-lg" id="sres_${t}">${d.final}</td>
+                        </tr>`; }).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                    <div class="flex justify-between gap-2 mt-4">
+                        <button onclick="SAVE_TYPES.forEach(t => { $('sadj_'+t).value=''; $('sov_'+t).value=''; }); previewSaves();" class="btn-galactic px-4 py-2 rounded text-sm">Clear all</button>
+                        <span class="flex gap-2">
+                            <button onclick="closeModal()" class="btn-galactic px-4 py-2 rounded text-sm">Cancel</button>
+                            <button onclick="saveSaves()" class="btn-fantasy px-4 py-2 rounded text-sm"><i class="fas fa-save mr-1"></i>Save</button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function readSaveInputs() {
+    const adjust = {}, override = {};
+    SAVE_TYPES.forEach(t => {
+        const a = parseInt($('sadj_' + t).value); if (a) adjust[t] = a;
+        const o = $('sov_' + t).value.trim(); if (o !== '' && !isNaN(parseInt(o))) override[t] = Math.min(20, Math.max(1, parseInt(o)));
+    });
+    return { adjust, override };
+}
+function previewSaves() {
+    const char = State.currentCharacter;
+    const v = readSaveInputs();
+    const tmp = { ...char, saveAdjust: v.adjust, saveOverride: v.override };
+    SAVE_TYPES.forEach(t => { $('sres_' + t).textContent = getSaveDetails(tmp, t).final; });
+}
+function saveSaves() {
+    const char = State.currentCharacter;
+    const v = readSaveInputs();
+    char.saveAdjust = v.adjust;
+    char.saveOverride = v.override;
+    Storage.save();
+    closeModal();
+    render();
+    toast('Saving throws updated');
 }

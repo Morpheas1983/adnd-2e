@@ -8,7 +8,7 @@ function renderSpells(container) {
     const isCaster = ['Mage','Specialist Wizard','Cleric','Druid','Paladin','Ranger','Bard'].includes(char.class);
     const isWizard = ['Mage','Specialist Wizard','Bard'].includes(char.class);
     const isPriest = ['Cleric','Druid','Paladin','Ranger'].includes(char.class);
-    const slots = getSpellSlots(char.class, char.level);
+    const slots = spellSlotsFor(char).slots;
     const maxSpellLevel = slots.length; // highest level this caster can cast
 
     // Filter spells to only those the caster can actually cast at their level
@@ -139,6 +139,7 @@ function renderSpells(container) {
                 </div>
                 <div class="parchment scroll-border p-4 fade-in">
                     <div class="section-header"><i class="fas fa-scroll"></i>Spell Library</div>
+                    <div class="mb-3 p-3 rounded bg-amber-50 border border-amber-300">${magicAccessHtml(char)}${spellSlotsFor(char).note ? `<div class="text-xs text-green-800 mt-1"><i class="fas fa-plus-circle mr-1"></i>Spell slots ${spellSlotsFor(char).note}.</div>` : ''}</div>
                     <p class="text-sm text-amber-700 mb-3">
                         Showing spells up to Level ${maxSpellLevel} (your current casting limit). 
                         Click a spell to learn it. Click a known spell to prepare/unprepare it. 
@@ -199,7 +200,7 @@ function renderSpells(container) {
 function castSpell(spellName, spellLevel) {
     const char = State.currentCharacter;
     if (!char) return;
-    const slots = getSpellSlots(char.class, char.level);
+    const slots = spellSlotsFor(char).slots;
     if (!slots[spellLevel - 1]) return toast('No slots for this spell level!', 'error');
     const totalSlots = slots[spellLevel - 1];
     char.usedSpellSlots = char.usedSpellSlots || {};

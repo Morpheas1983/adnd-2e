@@ -66,16 +66,59 @@ function getTHAC0(className, level) {
     const entry = cls.thac0.find(t => t[0] === level);
     return entry ? entry[1] : (cls.thac0[cls.thac0.length-1]?.[1] || 20);
 }
+/* Saving throws: PHB Table 60, by class group and level range */
+const SAVE_TABLES = {
+    // [max level of the range, PPDM, RSW, PP, BW, SP]
+    warrior: [[0, 16, 18, 17, 20, 19], [2, 14, 16, 15, 17, 17], [4, 13, 15, 14, 16, 16], [6, 11, 13, 12, 13, 14], [8, 10, 12, 11, 12, 13],
+              [10, 8, 10, 9, 9, 11], [12, 7, 9, 8, 8, 10], [14, 5, 7, 6, 5, 8], [16, 4, 6, 5, 4, 7], [99, 3, 5, 4, 4, 6]],
+    priest:  [[3, 10, 14, 13, 16, 15], [6, 9, 13, 12, 15, 14], [9, 7, 11, 10, 13, 12], [12, 6, 10, 9, 12, 11], [15, 5, 9, 8, 11, 10],
+              [18, 4, 8, 7, 10, 9], [99, 2, 6, 5, 8, 7]],
+    rogue:   [[4, 13, 14, 12, 16, 15], [8, 12, 12, 11, 15, 13], [12, 11, 10, 10, 14, 11], [16, 10, 8, 9, 13, 9], [20, 9, 6, 8, 12, 7], [99, 8, 4, 7, 11, 5]],
+    wizard:  [[5, 14, 11, 13, 15, 12], [10, 13, 9, 11, 13, 10], [15, 11, 7, 9, 11, 8], [20, 10, 5, 7, 9, 6], [99, 8, 3, 5, 7, 4]]
+};
+const SAVE_TYPES = ['ppdm', 'rsw', 'pp', 'bw', 'sp'];
+const SAVE_NAMES = { ppdm: 'Paralyzation, Poison, Death Magic', rsw: 'Rod, Staff, Wand', pp: 'Petrification, Polymorph', bw: 'Breath Weapon', sp: 'Spell' };
 function getSave(className, level, saveType) {
-    const cls = DB.classes[className];
-    if (!cls) return 20;
-    const saves = cls.saves[saveType];
-    if (!saves) return 20;
-    if (level <= 5) return saves[0];
-    if (level <= 10) return saves[1];
-    if (level <= 15) return saves[2];
-    if (level <= 20) return saves[3];
-    return saves[4];
+    const group = (typeof classGroup === 'function') ? classGroup(className) : 'warrior';
+    const table = SAVE_TABLES[group] || SAVE_TABLES.warrior;
+    const lvl = Math.max(0, parseInt(level) || 0);
+    const row = table.find(r => lvl <= r[0]) || table[table.length - 1];
+    const idx = SAVE_TYPES.indexOf(saveType);
+    return idx === -1 ? 20 : row[idx + 1];
+}
+
+// Constitution-based racial save bonus for dwarves, halflings and gnomes (PHB Table 9)
+function conSaveBonus(con) {
+    const c = parseInt(con) || 10;
+    if (c >= 18) return 5; if (c >= 14) return 4; if (c >= 11) return 3; if (c >= 7) return 2; if (c >= 4) return 1; return 0;
+}
+// Wisdom magical defense adjustment (PHB Table 5): vs mind-affecting spells
+function wisMagicDefense(wis) {
+    const w = parseInt(wis) || 10;
+    if (w <= 3) return -3; if (w === 4) return -2; if (w <= 7) return -1; if (w <= 14) return 0;
+    if (w <= 18) return w - 14; return 4;
+}
+
+/* Everything that makes up one saving throw. Bonuses are positive = better (they lower the number to roll). */
+function getSaveDetails(char, saveType) {
+    const base = getSave(char.class, char.level, saveType);
+    const parts = [];
+    if (char.class === 'Paladin') parts.push({ label: 'Paladin', value: 2 });
+    const race = char.race;
+    const conB = conSaveBonus(getModifiedStat(char, 'con'));
+    if (['Dwarf', 'Halfling', 'Gnome'].includes(race) && conB && (saveType === 'rsw' || saveType === 'sp')) parts.push({ label: `${race} (CON)`, value: conB });
+    const eff = getEffectMods(char).saves || 0;
+    if (eff) parts.push({ label: 'Effects', value: eff });
+    const adj = parseInt((char.saveAdjust || {})[saveType]) || 0;
+    if (adj) parts.push({ label: 'Adjustment', value: adj });
+    const override = (char.saveOverride || {})[saveType];
+    const computed = Math.max(2, base - parts.reduce((n, x) => n + x.value, 0));
+    const notes = [];
+    if (saveType === 'ppdm' && ['Dwarf', 'Halfling'].includes(race) && conB) notes.push(`+${conB} vs poison`);
+    if (saveType === 'sp') { const w = wisMagicDefense(getModifiedStat(char, 'wis')); if (w) notes.push(`${formatMod(w)} vs mind-affecting spells (WIS)`); }
+    if (saveType === 'sp' && char.class === 'Specialist Wizard' && char.kit) notes.push(`+1 vs ${char.kit} school spells`);
+    const final = override != null && override !== '' ? Math.max(1, parseInt(override)) : computed;
+    return { base, parts, computed, override: override != null && override !== '' ? parseInt(override) : null, final, notes };
 }
 function calcAC(char) {
     const dexAdj = dexDefenseAdj(getModifiedStat(char, 'dex'));   // PHB defensive adjustment
@@ -178,7 +221,6 @@ function getExpectedProfs(className, level) {
 function getSpellSlots(className, level) {
     const cls = DB.classes[className];
     if (!cls || !cls.spell_slots) {
-        console.log('getSpellSlots: no spell_slots for', className);
         return [];
     }
     const slots = cls.spell_slots;
@@ -187,13 +229,11 @@ function getSpellSlots(className, level) {
     if (slots.offset) {
         effectiveLevel = numLevel - slots.offset;
         if (effectiveLevel < 1) {
-            console.log('getSpellSlots:', className, 'level', numLevel, 'offset', slots.offset, '-> no spells yet');
             return [];
         }
     }
     const idx = Math.min(effectiveLevel - 1, slots.table.length - 1);
     const result = slots.table[idx] || [];
-    console.log('getSpellSlots:', className, 'level', numLevel, 'effective', effectiveLevel, 'idx', idx, 'result', JSON.stringify(result));
     return result;
 }
 
@@ -251,7 +291,7 @@ function getMaxSpellLevel(intScore) {
 function castSpell(spellName, spellLevel) {
     const char = State.currentCharacter;
     if (!char) return;
-    const slots = getSpellSlots(char.class, char.level);
+    const slots = spellSlotsFor(char).slots;
     if (!slots[spellLevel - 1]) return toast('No slots for this spell level!', 'error');
     const totalSlots = slots[spellLevel - 1];
     char.usedSpellSlots = char.usedSpellSlots || {};
@@ -314,9 +354,7 @@ function getEffectBreakdown(char, stat) {
 }
 
 function getModifiedSave(char, saveType) {
-    const base = getSave(char.class, char.level, saveType);
-    const mods = getEffectMods(char);
-    return Math.max(1, base - (mods.saves || 0)); // lower is better for saves
+    return getSaveDetails(char, saveType).final;   // lower is better
 }
 
 function getSaveBreakdown(char) {
@@ -699,7 +737,7 @@ function castSpellOnTarget(spellName, spellLevel, targetId) {
     const target = State.characters.find(c => c.id === targetId);
     if (!target) return toast('Target not found', 'error');
 
-    const slots = getSpellSlots(caster.class, caster.level);
+    const slots = spellSlotsFor(caster).slots;
     if (!slots[spellLevel - 1]) return toast('No slots for this spell level!', 'error');
     const totalSlots = slots[spellLevel - 1];
     caster.usedSpellSlots = caster.usedSpellSlots || {};

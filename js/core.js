@@ -686,20 +686,8 @@ function hideBootSpinner() { const d = document.getElementById('bootSpinner'); i
 
 
 function getAvailableSpells(char) {
-    const isWizard = char.class === 'Mage';
-    const isSpecialist = char.class === 'Specialist Wizard';
-    const isPriest = ['Cleric','Druid','Paladin','Ranger'].includes(char.class);
-    const isBard = char.class === 'Bard';
-    let base = [];
-    if (isWizard || isBard) base = [...DB.wizard_spells, ...(State.customSpells.wizard || [])];
-    else if (isSpecialist) {
-        const school = char.kit;
-        base = [...DB.wizard_spells, ...(State.customSpells.wizard || [])].filter(s => 
-            s.school === school
-        );
-    }
-    else if (isPriest) base = [...DB.priest_spells, ...(State.customSpells.priest || [])];
-    return base;
+    // Schools (wizards) and spheres (priests) per the PHB: see js/magic.js
+    return availableSpellsFor(char);
 }
 
 /* ============================
