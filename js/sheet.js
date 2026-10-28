@@ -678,19 +678,20 @@ function renderSavesPanel(char) {
     const short = { ppdm: 'PPDM', rsw: 'RSW', pp: 'PP', bw: 'BW', sp: 'SP' };
     return `
         <div class="section-header justify-between"><span><i class="fas fa-dice-d20 mr-2"></i>Saving Throws</span>
-            ${edit ? `<button onclick="showSavesModal()" class="btn-galactic px-2 py-1 rounded text-xs normal-case"><i class="fas fa-sliders-h mr-1"></i>Adjust</button>` : ''}</div>
+            ${edit ? `<button onclick="showSavesModal()" class="btn-fantasy px-3 py-1 rounded text-xs normal-case"><i class="fas fa-pen mr-1"></i>Edit saving throws</button>` : ''}</div>
+        ${edit ? '<p class="text-xs text-amber-700 mb-2"><i class="fas fa-hand-pointer mr-1"></i>Tap a saving throw to change it.</p>' : ''}
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
             ${SAVE_TYPES.map(t => {
                 const d = getSaveDetails(char, t);
                 const changed = d.final !== d.base;
                 return `
-                <div class="saving-throw-box">
+                <div class="saving-throw-box ${edit ? 'cursor-pointer hover:ring-2 hover:ring-amber-500' : ''}" ${edit ? `onclick="showSavesModal('${t}')" title="Change this saving throw"` : ''}>
                     <div class="value ${d.override != null ? 'text-purple-800' : changed ? 'text-green-700' : ''}">${d.final}${changed ? `<span class="text-xs ml-1 opacity-70">(${d.base})</span>` : ''}</div>
                     <div class="label" title="${SAVE_NAMES[t]}">${short[t]}</div>
                     ${d.parts.length ? `<div class="text-[11px] text-green-800 mt-1">${d.parts.map(p => `${escapeHtml(p.label)} ${formatMod(p.value)}`).join(', ')}</div>` : ''}
                     ${d.override != null ? '<div class="text-[11px] text-purple-800 mt-1"><i class="fas fa-lock mr-1"></i>set by hand</div>' : ''}
                     ${d.notes.length ? `<div class="text-[11px] text-amber-700 mt-1">${d.notes.map(escapeHtml).join('; ')}</div>` : ''}
-                    <button onclick="rollSave('${t}')" class="text-xs mt-1 px-2 py-0.5 rounded bg-amber-700 text-amber-50" title="Roll d20: ${d.final} or more saves"><i class="fas fa-dice-d20 mr-1"></i>Roll</button>
+                    <button onclick="event.stopPropagation(); rollSave('${t}')" class="text-xs mt-1 px-2 py-0.5 rounded bg-amber-700 text-amber-50" title="Roll d20: ${d.final} or more saves"><i class="fas fa-dice-d20 mr-1"></i>Roll</button>
                 </div>`; }).join('')}
         </div>
         <div class="text-xs text-amber-700 mt-2 text-center">
@@ -706,7 +707,7 @@ function rollSave(t) {
     toast(`${SAVE_NAMES[t]}: rolled ${r} vs ${d.final}: ${ok ? 'Saved!' : 'Failed'}`, ok ? 'success' : 'error');
 }
 
-function showSavesModal() {
+function showSavesModal(focusType) {
     const char = State.currentCharacter;
     const adj = char.saveAdjust || {}, ov = char.saveOverride || {};
     $('modalContainer').innerHTML = `
@@ -732,6 +733,9 @@ function showSavesModal() {
                         </tbody>
                     </table>
                     </div>
+                    ${canOverrideProfLimits() && State.campaignId ? `<div class="mt-3 p-2 rounded bg-purple-50 border border-purple-300 text-sm flex flex-wrap items-center justify-between gap-2">
+                        <span><i class="fas fa-crown mr-1 text-purple-800"></i>DM: change the base table of the <b>${GROUP_LABEL[classGroup(char.class)]}</b> classes for every level, for the whole campaign.</span>
+                        <button onclick="showSaveTableModal('${classGroup(char.class)}')" class="btn-galactic px-3 py-1 rounded text-xs">Edit table</button></div>` : ''}
                     <div class="flex justify-between gap-2 mt-4">
                         <button onclick="SAVE_TYPES.forEach(t => { $('sadj_'+t).value=''; $('sov_'+t).value=''; }); previewSaves();" class="btn-galactic px-4 py-2 rounded text-sm">Clear all</button>
                         <span class="flex gap-2">
@@ -742,6 +746,11 @@ function showSavesModal() {
                 </div>
             </div>
         </div>`;
+    if (focusType && $('sov_' + focusType)) {
+        const row = $('sov_' + focusType).closest('tr');
+        row.classList.add('bg-amber-100');
+        $('sov_' + focusType).focus();
+    }
 }
 
 function readSaveInputs() {
@@ -767,4 +776,47 @@ function saveSaves() {
     closeModal();
     render();
     toast('Saving throws updated');
+}
+
+/* DM: edit a class group's saving throw table for the campaign */
+function showSaveTableModal(group) {
+    const custom = (State.saveTables || {})[group];
+    const rows = (Array.isArray(custom) && custom.length ? custom : SAVE_TABLES[group]).map(r => r.slice());
+    const def = SAVE_TABLES[group];
+    const rangeLabel = (i) => { const lo = i === 0 ? (group === 'warrior' ? 0 : 1) : def[i - 1][0] + 1; const hi = def[i][0]; return hi >= 99 ? `${lo}+` : lo === hi ? `${lo}` : `${lo}-${hi}`; };
+    $('modalContainer').innerHTML = `
+        <div class="modal-overlay" onclick="closeModal(event)">
+            <div class="modal-content wide" onclick="event.stopPropagation()">
+                <div class="p-6">
+                    <h2 class="fantasy-font text-xl font-bold text-amber-900 mb-1">${GROUP_LABEL[group]} saving throw table</h2>
+                    <p class="text-sm text-amber-700 mb-3">Applies to every ${group === 'warrior' ? 'Fighter, Paladin and Ranger' : group === 'priest' ? 'Cleric and Druid' : group === 'rogue' ? 'Thief and Bard' : 'Mage and Specialist Wizard'} in this campaign. ${custom ? '<b class="text-purple-800">Currently changed from the PHB.</b>' : 'Currently the PHB values.'}</p>
+                    <div class="overflow-x-auto">
+                    <table class="w-full text-sm min-w-[480px]">
+                        <thead><tr class="text-amber-800"><th class="text-left">Level</th>${SAVE_TYPES.map(t => `<th title="${SAVE_NAMES[t]}">${t.toUpperCase()}</th>`).join('')}</tr></thead>
+                        <tbody>
+                        ${rows.map((r, i) => `<tr class="border-t border-amber-200"><td class="py-1 font-bold">${rangeLabel(i)}</td>
+                            ${SAVE_TYPES.map((t, j) => `<td class="text-center"><input type="number" min="1" max="20" id="st_${i}_${j}" value="${r[j + 1]}" class="input-fantasy w-14 text-center px-1 py-1 ${r[j + 1] !== def[i][j + 1] ? 'bg-purple-100' : ''}"></td>`).join('')}</tr>`).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                    <div class="flex justify-between gap-2 mt-4">
+                        <button onclick="saveSaveTable('${group}', true)" class="btn-galactic px-4 py-2 rounded text-sm">Reset to PHB</button>
+                        <span class="flex gap-2">
+                            <button onclick="showSavesModal()" class="btn-galactic px-4 py-2 rounded text-sm">Back</button>
+                            <button onclick="saveSaveTable('${group}', false)" class="btn-fantasy px-4 py-2 rounded text-sm"><i class="fas fa-save mr-1"></i>Save table</button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function saveSaveTable(group, reset) {
+    State.saveTables = { ...(State.saveTables || {}) };
+    if (reset) delete State.saveTables[group];
+    else State.saveTables[group] = SAVE_TABLES[group].map((r, i) => [r[0], ...SAVE_TYPES.map((t, j) => Math.min(20, Math.max(1, parseInt($(`st_${i}_${j}`).value) || r[j + 1])))]);
+    Storage.save();
+    closeModal();
+    render();
+    toast(reset ? 'Table back to the PHB values' : 'Saving throw table saved for the campaign');
 }

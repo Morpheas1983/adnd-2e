@@ -275,8 +275,9 @@ function subscribeCampaign(cid) {
             State.creatures = parseJson(x.creaturesJson, []);
             State.customSpells = parseJson(x.customSpellsJson, { wizard: [], priest: [] });
             State.customProfs = parseJson(x.customProfsJson, { weapon: [], nonweapon: [] });
+            State.saveTables = parseJson(x.saveTablesJson, {});
             if (typeof registerAllCustomProfs === 'function') registerAllCustomProfs();
-            Cloud.synced.shared = JSON.stringify({ creatures: State.creatures, customSpells: State.customSpells, customProfs: State.customProfs });
+            Cloud.synced.shared = JSON.stringify({ creatures: State.creatures, customSpells: State.customSpells, customProfs: State.customProfs, saveTables: State.saveTables });
             if (first) { first = false; resolve(); } else if (['dm', 'bestiary', 'monsters', 'tactical'].includes(currentPage())) safeRender();
         }, err => { console.error('Shared state error', err); resolve(); }));
     }));
@@ -395,9 +396,9 @@ function syncToCloud() {
             Cloud.synced.dmNotes = c.dmNotes || '';
             writes++;
         }
-        const shared = JSON.stringify({ creatures: State.creatures || [], customSpells: State.customSpells || { wizard: [], priest: [] }, customProfs: State.customProfs || { weapon: [], nonweapon: [] } });
+        const shared = JSON.stringify({ creatures: State.creatures || [], customSpells: State.customSpells || { wizard: [], priest: [] }, customProfs: State.customProfs || { weapon: [], nonweapon: [] }, saveTables: State.saveTables || {} });
         if (State.isDM && shared !== Cloud.synced.shared) {
-            batch.set(base.collection('state').doc('shared'), { creaturesJson: JSON.stringify(State.creatures || []), customSpellsJson: JSON.stringify(State.customSpells || { wizard: [], priest: [] }), customProfsJson: JSON.stringify(State.customProfs || { weapon: [], nonweapon: [] }) });
+            batch.set(base.collection('state').doc('shared'), { creaturesJson: JSON.stringify(State.creatures || []), customSpellsJson: JSON.stringify(State.customSpells || { wizard: [], priest: [] }), customProfsJson: JSON.stringify(State.customProfs || { weapon: [], nonweapon: [] }), saveTablesJson: JSON.stringify(State.saveTables || {}) });
             Cloud.synced.shared = shared;
             writes++;
         }

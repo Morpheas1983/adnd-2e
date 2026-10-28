@@ -80,7 +80,9 @@ const SAVE_TYPES = ['ppdm', 'rsw', 'pp', 'bw', 'sp'];
 const SAVE_NAMES = { ppdm: 'Paralyzation, Poison, Death Magic', rsw: 'Rod, Staff, Wand', pp: 'Petrification, Polymorph', bw: 'Breath Weapon', sp: 'Spell' };
 function getSave(className, level, saveType) {
     const group = (typeof classGroup === 'function') ? classGroup(className) : 'warrior';
-    const table = SAVE_TABLES[group] || SAVE_TABLES.warrior;
+    // The DM can replace a class group's table for the whole campaign (house rules)
+    const custom = (typeof State !== 'undefined' && State.saveTables) ? State.saveTables[group] : null;
+    const table = (Array.isArray(custom) && custom.length) ? custom : (SAVE_TABLES[group] || SAVE_TABLES.warrior);
     const lvl = Math.max(0, parseInt(level) || 0);
     const row = table.find(r => lvl <= r[0]) || table[table.length - 1];
     const idx = SAVE_TYPES.indexOf(saveType);
