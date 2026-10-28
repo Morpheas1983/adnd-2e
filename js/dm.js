@@ -98,7 +98,7 @@ function renderDMView(container) {
                                 <span>XP: ${char.xp}</span>
                             </div>
                             <div class="flex flex-wrap gap-1 mt-2">
-                                ${(char.activeEffects || []).map(e => `<span class="effect-badge text-xs">${e.name}</span>`).join('')}
+                                ${conditionBadges(char)}
                                 ${(char.conditions || []).map(c => `<span class="condition-badge text-xs">${c}</span>`).join('')}
                             </div>
                             <div class="flex gap-1 mt-2">
@@ -107,6 +107,9 @@ function renderDMView(container) {
                                 </button>
                                 <button onclick="event.stopPropagation(); restById('${char.id}')" class="btn-fantasy px-2 py-1 rounded text-xs">
                                     <i class="fas fa-bed mr-1"></i>Rest
+                                </button>
+                                <button onclick="event.stopPropagation(); showConditionModal('${char.id}')" class="btn-magic px-2 py-1 rounded text-xs" title="Add a condition">
+                                    <i class="fas fa-plus mr-1"></i>Condition
                                 </button>
                             </div>
                         </div>

@@ -109,7 +109,8 @@ function getSaveDetails(char, saveType) {
     const race = char.race;
     const conB = conSaveBonus(getModifiedStat(char, 'con'));
     if (['Dwarf', 'Halfling', 'Gnome'].includes(race) && conB && (saveType === 'rsw' || saveType === 'sp')) parts.push({ label: `${race} (CON)`, value: conB });
-    const eff = getEffectMods(char).saves || 0;
+    const em = getEffectMods(char);
+    const eff = (em.saves || 0) + (em['save_' + saveType] || 0);
     if (eff) parts.push({ label: 'Effects', value: eff });
     const adj = parseInt((char.saveAdjust || {})[saveType]) || 0;
     if (adj) parts.push({ label: 'Adjustment', value: adj });
@@ -381,8 +382,16 @@ function getStatBreakdown(char, stat) {
     return `${sign}${diff} ${sourceNames}`;
 }
 
+// Ability score after effects/conditions. A condition can SET a score (e.g. Feeblemind INT 3,
+// Gauntlets of Ogre Power STR 18/00 = 18); the latest one applied wins, then +/- changes are added.
+function getSetStat(char, stat) {
+    let v = null;
+    (char.activeEffects || []).forEach(e => { if (e.sets && e.sets[stat] != null && e.sets[stat] !== '') v = parseInt(e.sets[stat]); });
+    return v;
+}
 function getModifiedStat(char, stat) {
-    const base = (char.stats?.[stat] || 10);
+    const set = getSetStat(char, stat);
+    const base = set != null ? set : (char.stats?.[stat] || 10);
     const mods = getEffectMods(char);
     return Math.max(1, Math.min(25, base + (mods[stat] || 0)));
 }
@@ -400,6 +409,11 @@ function applyEffect(char, effect) {
     Storage.save();
 }
 
+// What survives a rest: permanent conditions and those marked "lasts through rest"
+function effectsAfterRest(char) {
+    return (char.activeEffects || []).filter(e => e.permanent || e.keepOnRest);
+}
+
 function removeEffect(char, effectName) {
     if (!char.activeEffects) return;
     char.activeEffects = char.activeEffects.filter(e => e.name !== effectName);
@@ -412,6 +426,12 @@ function tickEffects(char) {
     let changed = false;
     const expired = [];
     char.activeEffects = char.activeEffects.filter(e => {
+        if (e.permanent || e.durationType === 'hours' || e.durationType === 'days') return true;   // not counted in combat rounds
+        if (e.durationType === 'turns' && e.kind === 'condition') {
+            e.roundsInTurn = (e.roundsInTurn || 0) + 1;
+            if (e.roundsInTurn < 10) { changed = true; return true; }
+            e.roundsInTurn = 0;
+        }
         if (e.duration > 0) {
             e.duration--;
             if (e.duration <= 0) {
@@ -469,7 +489,7 @@ function restCharacter(char) {
     if (!char) return;
     char.hp = char.maxHp;
     char.usedSpellSlots = {};
-    char.activeEffects = [];
+    char.activeEffects = effectsAfterRest(char);
     char.conditions = (char.conditions || []).filter(c => !['Fatigued', 'Exhausted', 'Berserking'].includes(c));
     char.lastUpdated = Date.now();
     Storage.save();
@@ -491,7 +511,7 @@ function restAll() {
     State.characters.filter(c => !State.campaignId || c.campaignId === State.campaignId).filter(canWriteChar).forEach(char => {
         char.hp = char.maxHp;
         char.usedSpellSlots = {};
-        char.activeEffects = [];
+        char.activeEffects = effectsAfterRest(char);
         char.conditions = (char.conditions || []).filter(c => !['Fatigued', 'Exhausted', 'Berserking'].includes(c));
         char.lastUpdated = Date.now();
     });

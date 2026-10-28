@@ -73,7 +73,8 @@ function speedOf(p) {
     const a = p.action === 'other' ? null : (ch.find(x => x.id === p.action) || (p.action ? null : defaultAction(c)));
     return a ? a.sf : 0;
 }
-function initRoll(p) { return rollDie(10) + speedOf(p) + (p.initMod || 0); }
+function condInit(p) { if (p.kind !== 'pc') return 0; const c = pcOf(p); return c ? (getEffectMods(c).init || 0) : 0; }
+function initRoll(p) { return rollDie(10) + speedOf(p) + condInit(p) + (p.initMod || 0); }
 function setAction(key, v) { const p = Battle.participants.find(x => x.key === key); if (!p) return; p.action = v; saveBattle(); render(); }
 function setSpeed(key, v) { const p = Battle.participants.find(x => x.key === key); if (!p) return; p.speed = parseInt(v) || 0; saveBattle(); render(); }
 
@@ -165,6 +166,7 @@ function battleRow(p, i, pcs) {
                     ${status}
                 </div>
                 <div class="text-xs text-amber-700">${v.sub}</div>
+                ${!isNpc && pcOf(p) ? `<div class="flex flex-wrap gap-1 mt-1 items-center">${conditionBadges(pcOf(p))}${condInit(p) ? `<span class="text-xs text-amber-800">init ${formatMod(condInit(p))}</span>` : ''}<button onclick="showConditionModal('${p.charId}')" class="text-xs text-purple-800 underline"><i class="fas fa-plus"></i> condition</button></div>` : ''}
                 <div class="flex flex-wrap gap-3 text-sm mt-1">
                     <span title="Hit Dice"><b>HD</b> ${v.hd}</span>
                     <span><b>AC</b> ${v.ac}</span>

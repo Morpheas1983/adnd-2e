@@ -262,48 +262,7 @@ function renderSheet(container) {
                                 <button onclick="addXP()" class="btn-fantasy px-4 py-2 rounded text-sm">Add</button>
                             </div>
                         </div>
-                        <div class="parchment scroll-border p-4 fade-in">
-                            <div class="section-header"><i class="fas fa-bolt"></i>Active Effects</div>
-                            ${(char.activeEffects || []).length === 0 && (char.conditions || []).length === 0 ? '<p class="text-amber-700 italic text-sm">No active effects.</p>' : ''}
-                            <div class="space-y-2">
-                                ${(char.activeEffects || []).map(e => `
-                                    <div class="effect-card p-3 rounded border border-amber-300 bg-amber-50">
-                                        <div class="flex justify-between items-start">
-                                            <div class="flex items-center gap-2">
-                                                <i class="fas fa-bolt text-amber-700"></i>
-                                                <span class="font-bold text-amber-900">${e.name}</span>
-                                                <span class="text-xs bg-amber-200 text-amber-800 px-2 py-1 rounded">${e.duration} ${e.durationType} left</span>
-                                            </div>
-                                            <button onclick="removeEffect(State.currentCharacter, '${e.name}'); render();" class="text-red-700 hover:text-red-900" title="Remove effect">
-                                                <i class="fas fa-times"></i>
-                                            </button>
-                                        </div>
-                                        <div class="text-sm text-amber-800 mt-1">${e.description || ''}</div>
-                                        ${(() => {
-                                            const modParts = [];
-                                            if (e.mods) {
-                                                const modLabels = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA', ac: 'AC', thac0: 'THAC0', damage: 'Dmg', saves: 'Saves' };
-                                                Object.keys(e.mods).forEach(k => {
-                                                    if (e.mods[k] !== 0) {
-                                                        const sign = e.mods[k] > 0 ? '+' : '';
-                                                        modParts.push(`${modLabels[k] || k}: ${sign}${e.mods[k]}`);
-                                                    }
-                                                });
-                                            }
-                                            return modParts.length > 0 ? `<div class="text-xs text-amber-700 mt-1 font-mono">${modParts.join(' | ')}</div>` : '';
-                                        })()}
-                                    </div>
-                                `).join('')}
-                                ${(char.conditions || []).map(c => `
-                                    <div class="condition-card p-2 rounded border border-red-300 bg-red-50">
-                                        <div class="flex items-center gap-2">
-                                            <i class="fas fa-skull-crossbones text-red-700"></i>
-                                            <span class="font-bold text-red-900">${c}</span>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
+                        ${renderConditionsPanel(char)}
                         <div class="parchment scroll-border p-4 fade-in">
                             <div class="section-header"><i class="fas fa-coins"></i>Wealth</div>
                             <div class="grid grid-cols-2 gap-2 text-sm">
