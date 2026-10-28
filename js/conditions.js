@@ -23,7 +23,7 @@ const CONDITION_PRESETS = [
     { name: 'Feebleminded', description: 'Intelligence and Wisdom set to 3 until Heal, Restoration or Wish.', sets: { int: 3, wis: 3 }, permanent: true, keepOnRest: true },
     { name: 'Middle Age', description: 'PHB aging: -1 STR, -1 CON, +1 INT, +1 WIS.', mods: { str: -1, con: -1, int: 1, wis: 1 }, permanent: true, keepOnRest: true },
     { name: 'Old Age', description: 'PHB aging (total): -3 STR, -2 DEX, -2 CON, +1 INT, +2 WIS.', mods: { str: -3, dex: -2, con: -2, int: 1, wis: 2 }, permanent: true, keepOnRest: true },
-    { name: 'Gauntlets of Ogre Power', description: 'Strength set to 18/00 (enter 18 here; exceptional STR as noted).', sets: { str: 18 }, mods: { damage: 6, thac0: -3 }, permanent: true, keepOnRest: true },
+    { name: 'Gauntlets of Ogre Power', description: 'Strength becomes 18/00 (+3 to hit, +6 damage, from the Strength table).', sets: { str: 18, strEx: 100 }, permanent: true, keepOnRest: true },
     { name: 'Ring of Protection +1', description: '+1 to AC and saving throws.', mods: { ac: -1, saves: 1 }, permanent: true, keepOnRest: true },
     { name: 'Lucky (vs poison)', description: '+2 to saving throws vs poison.', mods: { save_ppdm: 2 }, duration: 1, durationType: 'days', keepOnRest: true }
 ];
@@ -37,7 +37,7 @@ function condCharById(id) { return (State.characters || []).find(c => c.id === i
 /* ---------- Text helpers ---------- */
 function condModsSummary(e) {
     const parts = [];
-    const L = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA', ac: 'AC', thac0: 'THAC0', damage: 'Dmg', saves: 'All saves', init: 'Init' };
+    const L = { strEx: 'STR 18/', str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA', ac: 'AC', thac0: 'THAC0', damage: 'Dmg', saves: 'All saves', init: 'Init' };
     const sv = typeof SAVE_NAMES !== 'undefined' ? SAVE_NAMES : {};
     Object.entries(e.sets || {}).forEach(([k, v]) => { if (v !== '' && v != null) parts.push(`${L[k] || k} = ${v}`); });
     Object.entries(e.mods || {}).forEach(([k, v]) => {
@@ -141,6 +141,7 @@ function showConditionModal(charId, idx) {
                             <div class="text-xs font-bold text-amber-800">${s.toUpperCase()} <span class="font-normal">(${(char.stats || {})[s] || 10})</span></div>
                             ${num('cm_' + s, e && e.mods ? e.mods[s] : null, 'Change')}
                             <input type="number" id="cs_${s}" value="${e && e.sets && e.sets[s] != null ? e.sets[s] : ''}" placeholder="set" title="Set to" class="input-fantasy w-full text-center px-1 py-1 text-xs mt-1">
+                            ${s === 'str' ? `<input type="number" id="cs_strEx" min="1" max="100" value="${e && e.sets && e.sets.strEx != null ? e.sets.strEx : ''}" placeholder="18/xx" title="Exceptional strength when set to 18 (100 = 18/00)" class="input-fantasy w-full text-center px-1 py-1 text-xs mt-1">` : ''}
                         </div>`).join('')}
                     </div>
 
@@ -197,7 +198,7 @@ function readConditionForm() {
     const unit = $('condUnit').value;
     const mods = {}, sets = {};
     document.querySelectorAll('[id^="cm_"]').forEach(el => { const v = parseInt(el.value); if (v) mods[el.id.slice(3)] = v; });
-    document.querySelectorAll('[id^="cs_"]').forEach(el => { const v = parseInt(el.value); if (!isNaN(v) && el.value.trim() !== '') sets[el.id.slice(3)] = Math.max(1, Math.min(25, v)); });
+    document.querySelectorAll('[id^="cs_"]').forEach(el => { const v = parseInt(el.value); if (!isNaN(v) && el.value.trim() !== '') sets[el.id.slice(3)] = Math.max(1, Math.min(el.id === 'cs_strEx' ? 100 : 25, v)); });
     const c = { kind: 'condition', name, description: $('condDesc').value.trim(), mods, keepOnRest: $('condKeep').checked };
     if (Object.keys(sets).length) c.sets = sets;
     if (unit === 'permanent') { c.permanent = true; c.keepOnRest = true; c.durationType = 'permanent'; c.duration = 0; }

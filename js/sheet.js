@@ -10,7 +10,7 @@ function renderEquippedGear(char) {
         i.type !== 'weapon' && 
         (i.bonusAC || 0) !== 0
     ) || [];
-    const strMod = getModifier(getModifiedStat(char, 'str'));
+    const strMod = strDmgAdj(char);
     const dexAdj = dexDefenseAdj(getModifiedStat(char, 'dex'));   // PHB Table 2 defensive adjustment
     const thac0 = getTHAC0(char.class, char.level);
     const effectMods = getEffectMods(char);
@@ -26,7 +26,8 @@ function renderEquippedGear(char) {
             const dmgText = effDmgMod > 0 ? `+${effDmgMod}` : (effDmgMod < 0 ? `${effDmgMod}` : '');
             const parts = [`Base ${a.baseThac0}`];
             if (weapon.bonusAttack) parts.push(`Magic ${formatMod(weapon.bonusAttack)}`);
-            if (a.strMod) parts.push(`Str ${formatMod(a.strMod)}`);
+            if (a.strHit) parts.push(`Str ${formatMod(a.strHit)}`);
+            if (a.dexHit) parts.push(`Dex missile ${formatMod(a.dexHit)}`);
             if (a.specHit) parts.push(`Spec +1`);
             if (a.nonProfPenalty) parts.push(`Not proficient ${a.nonProfPenalty}`);
             if (a.effHit) parts.push(`Effects ${formatMod(a.effHit)}`);
@@ -217,15 +218,14 @@ function renderSheet(container) {
                                     return `
                                     <div class="stat-box p-2 ${isModified ? 'stat-modified' : ''}">
                                         <div class="stat-label">${s.toUpperCase()}</div>
-                                        <div class="stat-value ${isModified ? 'text-amber-700' : ''}">${effVal}${isModified ? `<span class="text-xs ml-1 opacity-70">(${baseVal})</span>` : ''}</div>
-                                        ${s === 'dex'
-                                            ? `<div class="stat-mod" title="PHB defensive adjustment (AC) and missile attack adjustment">AC ${formatMod(dexDefenseAdj(effVal))} · Missile ${formatMod(dexReactionAdj(effVal))}</div>`
-                                            : `<div class="stat-mod">${formatMod(effectiveMods[s])}</div>`}
+                                        <div class="stat-value ${isModified ? 'text-amber-700' : ''}">${s === 'str' ? strInfo(char).label : effVal}${isModified ? `<span class="text-xs ml-1 opacity-70">(${baseVal})</span>` : ''}</div>
+                                        <div class="stat-mod" style="font-size:0.7rem">${abilityBoxLine(char, s)}</div>
                                         ${bd ? `<div class="text-xs text-amber-800 font-bold mt-1">${bd}</div>` : ''}
                                     </div>
                                 `}).join('')}
                             </div>
                         </div>
+                        ${renderAbilityDetails(char)}
                         <div class="parchment scroll-border p-4 fade-in">
                             <div class="section-header"><i class="fas fa-heart"></i>Hit Points</div>
                             <div class="flex items-center gap-4 mb-2">
@@ -302,8 +302,8 @@ function renderSheet(container) {
                                     ${(() => { const bd = formatEffectBreakdown(getEffectBreakdown(char, 'thac0')); return bd ? `<div class="text-xs text-green-700 font-bold mt-1">${bd}</div>` : ''; })()}
                                 </div>
                                 <div class="saving-throw-box">
-                                    <div class="value">${effectiveMods.str}</div>
-                                    <div class="label">Hit Mod</div>
+                                    <div class="value">${formatMod(strInfo(char).hit)} / ${formatMod(strInfo(char).dmg)}</div>
+                                    <div class="label">STR Hit / Dmg</div>
                                     ${(() => { const bd = formatEffectBreakdown(getEffectBreakdown(char, 'str')); return bd ? `<div class="text-xs text-green-700 font-bold mt-1">${bd}</div>` : ''; })()}
                                 </div>
                                 ${(() => {
@@ -475,10 +475,10 @@ function recalcHPForLevel() {
     const char = State.currentCharacter;
     const newLevel = parseInt($('editLevelValue').value) || char.level;
     const cls = DB.classes[char.class];
-    const conMod = getModifier(char.stats?.con || 10);
+    const con = getModifiedStat(char, 'con');
     let total = 0;
     for (let i = 1; i <= newLevel; i++) {
-        total += Math.max(1, rollDie(cls.hd) + conMod);
+        total += rollHitDie(cls.hd, con, char.class);
     }
     $('editHPValue').value = total;
     toast(`Calculated ${total} HP for level ${newLevel}`);

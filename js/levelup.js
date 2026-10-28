@@ -7,7 +7,7 @@ function renderLevelUp(container) {
     const canLevel = (char.xp || 0) >= nextXP;
     const cls = DB.classes[char.class];
     const hd = cls ? cls.hd : 6;
-    const conMod = getModifier(char.stats?.con || 10);
+    const conMod = conHpAdj(getModifiedStat(char, 'con'), char.class);
 
     const now = charProfSummary(char);
     const next = profSlotSummary({ className: char.class, level: nextLevel, intScore: char.stats?.int || 10,
@@ -96,8 +96,7 @@ function mountLevelProfPicker() {
 function rollLevelUpHP() {
     const char = State.currentCharacter;
     const cls = DB.classes[char.class];
-    const conMod = getModifier(char.stats?.con || 10);
-    const roll = Math.max(1, rollDie(cls.hd) + conMod);
+    const roll = rollHitDie(cls.hd, getModifiedStat(char, 'con'), char.class);
     $('levelUpHP').value = roll;
     toast(`Rolled ${roll} HP!`);
 }

@@ -36,29 +36,6 @@ function getModifier(score) {
     if (score >= 4) return -2;
     return -3;
 }
-// PHB Table 2 (Dexterity). Defensive adjustment: negative is better (lowers AC).
-function dexDefenseAdj(score) {
-    const d = parseInt(score) || 10;
-    if (d <= 3) return 4;
-    if (d <= 6) return 7 - d;          // 4: +3, 5: +2, 6: +1
-    if (d <= 14) return 0;
-    if (d <= 18) return 14 - d;        // 15: -1, 16: -2, 17: -3, 18: -4
-    if (d <= 20) return -4;
-    if (d <= 23) return -5;
-    return -6;
-}
-// Reaction / missile attack adjustment (PHB Table 2)
-function dexReactionAdj(score) {
-    const d = parseInt(score) || 10;
-    if (d <= 3) return -3;
-    if (d <= 5) return d - 6;          // 4: -2, 5: -1
-    if (d <= 15) return 0;
-    if (d === 16) return 1;
-    if (d <= 18) return 2;
-    if (d <= 20) return 3;
-    if (d <= 23) return 4;
-    return 5;
-}
 function formatMod(mod) { return mod >= 0 ? `+${mod}` : `${mod}`; }
 function getTHAC0(className, level) {
     const cls = DB.classes[className];
@@ -95,12 +72,6 @@ function conSaveBonus(con) {
     if (c >= 18) return 5; if (c >= 14) return 4; if (c >= 11) return 3; if (c >= 7) return 2; if (c >= 4) return 1; return 0;
 }
 // Wisdom magical defense adjustment (PHB Table 5): vs mind-affecting spells
-function wisMagicDefense(wis) {
-    const w = parseInt(wis) || 10;
-    if (w <= 3) return -3; if (w === 4) return -2; if (w <= 7) return -1; if (w <= 14) return 0;
-    if (w <= 18) return w - 14; return 4;
-}
-
 /* Everything that makes up one saving throw. Bonuses are positive = better (they lower the number to roll). */
 function getSaveDetails(char, saveType) {
     const base = getSave(char.class, char.level, saveType);
@@ -118,6 +89,7 @@ function getSaveDetails(char, saveType) {
     const computed = Math.max(2, base - parts.reduce((n, x) => n + x.value, 0));
     const notes = [];
     if (saveType === 'ppdm' && ['Dwarf', 'Halfling'].includes(race) && conB) notes.push(`+${conB} vs poison`);
+    if (saveType === 'ppdm' && typeof conInfo === 'function') { const p = conInfo(char).poison; if (p) notes.push(`${formatMod(p)} vs poison (CON)`); }
     if (saveType === 'sp') { const w = wisMagicDefense(getModifiedStat(char, 'wis')); if (w) notes.push(`${formatMod(w)} vs mind-affecting spells (WIS)`); }
     if (saveType === 'sp' && char.class === 'Specialist Wizard' && char.kit) notes.push(`+1 vs ${char.kit} school spells`);
     const final = override != null && override !== '' ? Math.max(1, parseInt(override)) : computed;
@@ -195,8 +167,7 @@ function calcTHAC0(char) {
     const weapon = char.inventory?.find(i => i.equipped && i.type === 'weapon');
     if (weapon && typeof weaponAttackInfo === 'function') return weaponAttackInfo(char, weapon).effTHAC0;
     const base = getTHAC0(char.class, char.level);
-    const strMod = getModifier(getModifiedStat(char, 'str'));
-    return base - strMod + (getEffectMods(char).thac0 || 0);
+    return base - strHitAdj(char) + (getEffectMods(char).thac0 || 0);
 }
 
 function getNextXP(className, level) {
@@ -267,27 +238,6 @@ function getAvailableSpheres(alignment) {
     if (isLawful(alignment)) return all.filter(s => s !== 'Chaos');
     if (isChaotic(alignment)) return all.filter(s => s !== 'Law');
     return all;
-}
-
-function getMaxSpellsPerLevel(intScore) {
-    if (intScore >= 19) return Infinity; // All spells
-    if (intScore >= 18) return 18;
-    if (intScore >= 17) return 14;
-    if (intScore >= 15) return 11;
-    if (intScore >= 13) return 9;
-    if (intScore >= 10) return 7;
-    if (intScore >= 9)  return 6;
-    return 0; // Cannot learn spells
-}
-
-function getMaxSpellLevel(intScore) {
-    if (intScore >= 18) return 9;
-    if (intScore >= 16) return 8;
-    if (intScore >= 14) return 7;
-    if (intScore >= 12) return 6;
-    if (intScore >= 10) return 5;
-    if (intScore >= 9)  return 4;
-    return 0;
 }
 
 function castSpell(spellName, spellLevel) {

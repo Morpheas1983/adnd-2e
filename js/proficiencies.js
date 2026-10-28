@@ -206,7 +206,13 @@ function attacksPerRound(char, specialized) {
 /* Everything that changes a weapon attack. Used by the character sheet. */
 function weaponAttackInfo(char, weapon) {
     const thac0 = getTHAC0(char.class, char.level);
-    const strMod = getModifier(getModifiedStat(char, 'str'));
+    // PHB: melee uses STR hit/damage; missiles use the DEX missile adjustment to hit and
+    // get STR damage only when thrown (not from bows, crossbows or slings)
+    const missile = typeof weaponIsMissile === 'function' && weaponIsMissile(weapon);
+    const strHit = missile ? 0 : strHitAdj(char);
+    const dexHit = missile ? dexMissileAdj(getModifiedStat(char, 'dex')) : 0;
+    const strDmg = missile && weaponIsLauncher(weapon) ? 0 : strDmgAdj(char);
+    const strMod = strHit + dexHit;
     const prof = weaponProfFor(weapon);
     const proficient = !!prof && (char.weaponProfs || []).includes(prof);
     const specialized = proficient && canSpecialize(char.class) && (char.weaponSpecs || []).includes(prof);
@@ -220,10 +226,10 @@ function weaponAttackInfo(char, weapon) {
     const effHit = -(effects.thac0 || 0);
     const effDmg = effects.damage || 0;
     return {
-        prof, proficient, specialized, nonProfPenalty, specHit, specDmg, strMod, effHit, effDmg,
+        prof, proficient, specialized, nonProfPenalty, specHit, specDmg, strMod, strHit, dexHit, strDmg, missile, effHit, effDmg,
         baseThac0: thac0,
         effTHAC0: thac0 - toHit - effHit,
-        dmgMod: strMod + (weapon.bonusDamage || 0) + specDmg + effDmg,
+        dmgMod: strDmg + (weapon.bonusDamage || 0) + specDmg + effDmg,
         attacks: attacksPerRound(char, specialized)
     };
 }

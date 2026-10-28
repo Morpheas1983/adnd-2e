@@ -489,7 +489,7 @@ function showEditLevelModal() {
                                     <i class="fas fa-calculator"></i>
                                 </button>
                             </div>
-                            <div class="text-xs text-amber-700 mt-1">Hit Die: d${hd} + CON mod (${formatMod(getModifier(char.stats?.con || 10))}) per level</div>
+                            <div class="text-xs text-amber-700 mt-1">Hit Die: d${hd} + CON mod (${formatMod(conHpAdj(getModifiedStat(char, 'con'), char.class))}) per level</div>
                         </div>
                         <div class="p-3 bg-amber-100 rounded border border-amber-300 text-sm text-amber-800">
                             <i class="fas fa-exclamation-triangle mr-1"></i>

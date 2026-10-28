@@ -306,7 +306,11 @@ function updateStatPreview() {
 
     ['str','dex','con','int','wis','cha'].forEach(s => {
         const val = parseInt($('stat_'+s).value) || 10;
-        const mod = getModifier(val);
+        // Main PHB effect of each score (Tables 1-6)
+        const phb = { str: [STR_TABLE[Math.max(1, Math.min(25, val))][0], `Hit ${formatMod(STR_TABLE[Math.max(1, Math.min(25, val))][0])} Dmg ${formatMod(STR_TABLE[Math.max(1, Math.min(25, val))][1])}`],
+            dex: [-dexDefenseAdj(val), `AC ${formatMod(dexDefenseAdj(val))}`], con: [conHpAdj(val, clsName), `HP ${formatMod(conHpAdj(val, clsName))}`],
+            int: [0, `Lang ${intRow(val)[0]}`], wis: [wisMagicDefense(val), `MD ${formatMod(wisMagicDefense(val))}`], cha: [chaRow(val)[2], `React ${formatMod(chaRow(val)[2])}`] }[s];
+        const mod = phb[0];
         const raceMin = r['min_'+s], raceMax = r['max_'+s];
         const classMin = cls?.requirements?.[s] || 0;
         const raceValid = val >= raceMin && val <= raceMax;
@@ -317,9 +321,9 @@ function updateStatPreview() {
         if (valid) box.classList.remove('invalid');
         else box.classList.add('invalid');
 
-        $(`mod_${s}`).textContent = formatMod(mod);
+        $(`mod_${s}`).textContent = phb[1];
         $(`mod_${s}`).style.color = valid ? (mod >= 0 ? '#166534' : '#991b1b') : '#dc2626';
-        html += `${s.toUpperCase()}:${formatMod(mod)} `;
+        html += `${s.toUpperCase()}: ${phb[1]} &nbsp;`;
 
         if (!valid) {
             allValid = false;
@@ -380,7 +384,7 @@ function updateCreateHPDisplay() {
     const hpDiv = $('createHPDie');
     if (!cls || !hpDiv) return;
     const c = DB.classes[cls];
-    const conMod = getModifier(parseInt($('stat_con')?.value) || 10);
+    const conMod = conHpAdj(parseInt($('stat_con')?.value) || 10, cls);
     hpDiv.innerHTML = `d${c.hd} + CON ${formatMod(conMod)}`;
 }
 
@@ -388,8 +392,7 @@ function rollCreateHP() {
     const cls = $('charClass').value;
     if (!cls) return;
     const c = DB.classes[cls];
-    const conMod = getModifier(parseInt($('stat_con')?.value) || 10);
-    const roll = Math.max(1, rollDie(c.hd) + conMod);
+    const roll = rollHitDie(c.hd, parseInt($('stat_con')?.value) || 10, cls);
     $('createHP').value = roll;
     toast(`Rolled ${roll} HP!`);
 }
@@ -517,6 +520,11 @@ function finishCreation() {
         campaignId: State.campaignId || 'default',
         lastUpdated: Date.now()
     };
+    // Warriors with 18 Strength roll percentile (exceptional) strength
+    if (stats.str === 18 && canHaveExStr(cls) && !stats.strEx) {
+        stats.strEx = rollDie(100);
+        toast(`Exceptional strength rolled: 18/${stats.strEx >= 100 ? '00' : String(stats.strEx).padStart(2, '0')}`);
+    }
     if (cls === 'Thief' || cls === 'Bard') {
         DB.thieving_skills.forEach(s => char.thiefSkills[s.name] = s.base);
     }
