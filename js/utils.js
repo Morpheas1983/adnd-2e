@@ -188,15 +188,14 @@ function getACBreakdown(char) {
 }
 
 
+// THAC0 with the main equipped weapon: same numbers as the weapon card on the sheet
+// (STR, magic, specialization, non-proficiency penalty and active effects)
 function calcTHAC0(char) {
+    const weapon = char.inventory?.find(i => i.equipped && i.type === 'weapon');
+    if (weapon && typeof weaponAttackInfo === 'function') return weaponAttackInfo(char, weapon).effTHAC0;
     const base = getTHAC0(char.class, char.level);
     const strMod = getModifier(getModifiedStat(char, 'str'));
-    const weapon = char.inventory?.find(i => i.equipped && i.type === 'weapon');
-    const weaponBonus = weapon?.bonusAttack || 0;
-    let thac0 = base - weaponBonus - strMod;
-    const mods = getEffectMods(char);
-    thac0 += (mods.thac0 || 0);
-    return thac0;
+    return base - strMod + (getEffectMods(char).thac0 || 0);
 }
 
 function getNextXP(className, level) {

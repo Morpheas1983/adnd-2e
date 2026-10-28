@@ -84,7 +84,7 @@ function renderDMView(container) {
                                 </div>
                                 <div class="bg-amber-100 rounded p-1">
                                     <div class="text-amber-800">THAC0</div>
-                                    <div class="font-bold text-amber-900">${getTHAC0(char.class, char.level)}</div>
+                                    <div class="font-bold text-amber-900">${calcTHAC0(char)}</div>
                                 </div>
                             </div>
                             <div class="hp-bar mb-1">

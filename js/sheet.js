@@ -29,6 +29,7 @@ function renderEquippedGear(char) {
             if (a.strMod) parts.push(`Str ${formatMod(a.strMod)}`);
             if (a.specHit) parts.push(`Spec +1`);
             if (a.nonProfPenalty) parts.push(`Not proficient ${a.nonProfPenalty}`);
+            if (a.effHit) parts.push(`Effects ${formatMod(a.effHit)}`);
             html += `
                 <div class="bg-amber-100 rounded p-3 border ${a.proficient ? 'border-amber-300' : 'border-red-400'}">
                     <div class="text-xs text-amber-700 uppercase tracking-wide">Equipped Weapon${weapons.length > 1 ? ' #' + (idx+1) : ''}</div>
@@ -334,6 +335,7 @@ function renderSheet(container) {
                                 <div class="saving-throw-box">
                                     <div class="value">${calcTHAC0(char)}</div>
                                     <div class="label">THAC0</div>
+                                    ${(() => { const w = (char.inventory || []).find(i => i.equipped && i.type === 'weapon'); return `<div class="text-xs text-amber-600 mt-1" style="line-height:1.2">${w ? `with ${escapeHtml(w.name)} · ` : ''}base ${getTHAC0(char.class, char.level)}</div>`; })()}
                                     ${(() => { const bd = formatEffectBreakdown(getEffectBreakdown(char, 'thac0')); return bd ? `<div class="text-xs text-green-700 font-bold mt-1">${bd}</div>` : ''; })()}
                                 </div>
                                 <div class="saving-throw-box">

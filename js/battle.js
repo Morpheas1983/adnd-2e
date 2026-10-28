@@ -42,7 +42,7 @@ function view(p) {
             name: c ? c.name : (p.name + ' (left campaign)'), sub: c ? `${c.race} ${c.class} · ${escapeHtml(c.playerName || memberName(c.player))}` : '',
             hd: c ? `${lvl <= 9 ? lvl : 9}d${cls.hd || 8}${lvl > 9 ? `+${(lvl - 9) * (cls.hd >= 10 ? 3 : cls.hd >= 8 ? 2 : 1)}` : ''} (Lvl ${lvl})` : '?',
             hp: c ? (c.hp ?? 0) : 0, maxHp: c ? (c.maxHp || 1) : 1,
-            ac: c ? calcAC(c) : '?', thac0: c ? getTHAC0(c.class, c.level) : '?',
+            ac: c ? calcAC(c) : '?', thac0: c ? calcTHAC0(c) : '?',
             down: c ? (c.hp ?? 0) <= 0 : false, dead: c ? (c.hp ?? 0) <= -10 : false
         };
     }

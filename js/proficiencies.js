@@ -215,11 +215,15 @@ function weaponAttackInfo(char, weapon) {
     const specHit = specialized ? 1 : 0;
     const specDmg = specialized ? 2 : 0;
     const toHit = (weapon.bonusAttack || 0) + strMod + specHit + nonProfPenalty;
+    // Active effects (Bless, Prayer...): thac0 mod is negative when it helps
+    const effects = (typeof getEffectMods === 'function') ? getEffectMods(char) : {};
+    const effHit = -(effects.thac0 || 0);
+    const effDmg = effects.damage || 0;
     return {
-        prof, proficient, specialized, nonProfPenalty, specHit, specDmg, strMod,
+        prof, proficient, specialized, nonProfPenalty, specHit, specDmg, strMod, effHit, effDmg,
         baseThac0: thac0,
-        effTHAC0: thac0 - toHit,
-        dmgMod: strMod + (weapon.bonusDamage || 0) + specDmg,
+        effTHAC0: thac0 - toHit - effHit,
+        dmgMod: strMod + (weapon.bonusDamage || 0) + specDmg + effDmg,
         attacks: attacksPerRound(char, specialized)
     };
 }
