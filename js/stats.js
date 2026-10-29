@@ -1,8 +1,9 @@
 /* stats.js - Campaign statistics (creatures defeated, spells cast) and XP awards for the DM */
 let statsFilter = 'open';     // 'open' = not yet awarded, 'all' = everything
 const XP_RATES_KEY = 'adnd2e_xpRates';
-// Optional individual class awards (PHB Table 32). The DM can change the numbers.
-let xpRates = (() => { try { return Object.assign({ useClass: true, warriorPerHD: 10, wizardPerLevel: 50, priestPerLevel: 100, roguePerLevel: 0 }, JSON.parse(localStorage.getItem(XP_RATES_KEY) || '{}')); } catch (e) { return { useClass: true, warriorPerHD: 10, wizardPerLevel: 50, priestPerLevel: 100, roguePerLevel: 0 }; } })();
+// Optional individual class awards (DMG Table 34). The DM can change the numbers.
+const XP_DEFAULTS = { useClass: true, warriorPerHD: 10, wizardPerLevel: 50, priestPerLevel: 100, bardPerHD: 5 };
+let xpRates = (() => { try { const r = Object.assign({}, XP_DEFAULTS, JSON.parse(localStorage.getItem(XP_RATES_KEY) || '{}')); delete r.roguePerLevel; return r; } catch (e) { return { ...XP_DEFAULTS }; } })();
 let awardSelection = null;    // Set of charIds receiving XP
 let extraXP = {};             // charId -> extra XP typed by the DM
 
@@ -25,12 +26,13 @@ function computeAwards() {
         const g = classGroup(c.class);
         let classXP = 0; const why = [];
         if (xpRates.useClass && awardSelection.has(c.id)) {
-            if (g === 'warrior') {
+            const hdRate = g === 'warrior' ? xpRates.warriorPerHD : c.class === 'Bard' ? xpRates.bardPerHD : 0;
+            if (hdRate) {
                 const hd = kills.filter(e => e.creditCharId === c.id && !e.isNote).reduce((n, e) => n + hdCount(e.hd), 0);
-                if (hd) { classXP += hd * xpRates.warriorPerHD; why.push(`${hd} HD defeated × ${xpRates.warriorPerHD}`); }
+                if (hd) { classXP += hd * hdRate; why.push(`${hd} HD defeated × ${hdRate}`); }
             }
             const lv = spells.filter(e => e.charId === c.id).reduce((n, e) => n + (e.level || 0), 0);
-            const rate = g === 'wizard' ? xpRates.wizardPerLevel : g === 'priest' ? xpRates.priestPerLevel : g === 'rogue' ? xpRates.roguePerLevel : 0;
+            const rate = g === 'wizard' ? xpRates.wizardPerLevel : g === 'priest' ? xpRates.priestPerLevel : 0;
             if (lv && rate) { classXP += lv * rate; why.push(`${lv} spell level(s) × ${rate}`); }
         }
         const own = personal.filter(e => e.creditCharId === c.id).reduce((n, e) => n + (e.xp || 0), 0);
@@ -114,11 +116,12 @@ function renderStats(container) {
                     <div class="section-header"><i class="fas fa-trophy"></i>Give XP</div>
                     <p class="text-sm text-amber-800 mb-2">Uses everything not yet awarded: <b>${a.killXP} XP</b> from ${a.kills.length} creature(s)/entries is shared equally between the ticked characters (${a.share} each).</p>
                     <div class="flex flex-wrap items-center gap-3 text-sm mb-3 p-2 rounded bg-amber-50 border border-amber-300">
-                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" class="accent-amber-700" ${xpRates.useClass ? 'checked' : ''} onchange="setRate('useClass', this.checked)">Class awards (PHB, optional):</label>
+                        <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" class="accent-amber-700" ${xpRates.useClass ? 'checked' : ''} onchange="setRate('useClass', this.checked)">Class awards (DMG, optional):</label>
                         <span>Warrior <input type="number" value="${xpRates.warriorPerHD}" class="input-fantasy w-14 px-1 py-0 text-center" onchange="setRate('warriorPerHD', this.value)"> /HD defeated</span>
                         <span>Wizard <input type="number" value="${xpRates.wizardPerLevel}" class="input-fantasy w-14 px-1 py-0 text-center" onchange="setRate('wizardPerLevel', this.value)"> /spell level</span>
                         <span>Priest <input type="number" value="${xpRates.priestPerLevel}" class="input-fantasy w-14 px-1 py-0 text-center" onchange="setRate('priestPerLevel', this.value)"> /spell level</span>
-                        <span>Rogue <input type="number" value="${xpRates.roguePerLevel}" class="input-fantasy w-14 px-1 py-0 text-center" onchange="setRate('roguePerLevel', this.value)"> /spell level</span>
+                        <span>Bard <input type="number" value="${xpRates.bardPerHD}" class="input-fantasy w-14 px-1 py-0 text-center" onchange="setRate('bardPerHD', this.value)"> /HD defeated</span>
+                        <span class="text-xs text-amber-700 w-full">DMG Table 34: rogues also get 100 XP per successful special ability and 2 XP per gp of treasure; wizards 500 XP per spell level researched; priests 100 XP per granted power used. Add these in "Extra". Spell awards are meant only for spells cast for a real reason and with real danger.</span>
                     </div>
                     <div class="overflow-x-auto">
                     <table class="w-full text-sm min-w-[520px]">

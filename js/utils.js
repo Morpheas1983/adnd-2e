@@ -183,8 +183,8 @@ function getXPForLevel(className, level) {
 function getExpectedProfs(className, level) {
     const cls = DB.classes[className];
     if (!cls) return { weapon: 2, nonweapon: 2 };
-    const weaponExtra = Math.floor((level - 1) / cls.prof_advance.weapon);
-    const nonweaponExtra = Math.floor((level - 1) / cls.prof_advance.nonweapon);
+    const weaponExtra = Math.floor(level / cls.prof_advance.weapon);
+    const nonweaponExtra = Math.floor(level / cls.prof_advance.nonweapon);
     return {
         weapon: cls.prof_slots.weapon + weaponExtra,
         nonweapon: cls.prof_slots.nonweapon + nonweaponExtra
@@ -281,10 +281,14 @@ function restSpells() {
 /* ============================
    ACTIVE EFFECTS & CONDITIONS
    ============================ */
+// Everything that changes the character: equipped magic items (item.itemMods) and active effects / conditions
+function effectSources(char) {
+    const items = (char.inventory || []).filter(i => i.equipped && i.itemMods).map(i => ({ name: i.name, mods: i.itemMods.mods, sets: i.itemMods.sets, item: true }));
+    return [...items, ...(char.activeEffects || [])];
+}
 function getEffectMods(char) {
     const mods = { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0, ac: 0, thac0: 0, damage: 0, saves: 0 };
-    if (!char.activeEffects) return mods;
-    char.activeEffects.forEach(e => {
+    effectSources(char).forEach(e => {
         if (e.mods) {
             Object.keys(e.mods).forEach(k => {
                 mods[k] = (mods[k] || 0) + (e.mods[k] || 0);
@@ -295,9 +299,8 @@ function getEffectMods(char) {
 }
 
 function getEffectBreakdown(char, stat) {
-    if (!char.activeEffects) return [];
     const breakdown = [];
-    char.activeEffects.forEach(e => {
+    effectSources(char).forEach(e => {
         if (e.mods && e.mods[stat] !== undefined && e.mods[stat] !== 0) {
             breakdown.push({ name: e.name, value: e.mods[stat] });
         }
@@ -336,7 +339,7 @@ function getStatBreakdown(char, stat) {
 // Gauntlets of Ogre Power STR 18/00 = 18); the latest one applied wins, then +/- changes are added.
 function getSetStat(char, stat) {
     let v = null;
-    (char.activeEffects || []).forEach(e => { if (e.sets && e.sets[stat] != null && e.sets[stat] !== '') v = parseInt(e.sets[stat]); });
+    effectSources(char).forEach(e => { if (e.sets && e.sets[stat] != null && e.sets[stat] !== '') v = parseInt(e.sets[stat]); });
     return v;
 }
 function getModifiedStat(char, stat) {

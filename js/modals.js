@@ -73,6 +73,7 @@ function showAddItemModal() {
                         <button class="tab-btn active" onclick="switchAddItemTab('weapons', this)">Weapons</button>
                         <button class="tab-btn" onclick="switchAddItemTab('armor', this)">Armor</button>
                         <button class="tab-btn" onclick="switchAddItemTab('gear', this)">Gear</button>
+                        <button class="tab-btn" onclick="switchAddItemTab('magic', this)"><i class="fas fa-magic mr-1"></i>Magic (DMG)</button>
                         <button class="tab-btn" onclick="switchAddItemTab('custom', this)">Custom</button>
                     </div>
                     
@@ -121,6 +122,26 @@ function showAddItemModal() {
                         </div>
                     </div>
                     
+                    <div id="addItemTab_magic" class="add-item-tab hidden">
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" id="magicSearch" class="input-fantasy flex-1 px-3 py-2" placeholder="Search ${(DB.magic_items || []).length} magic items..." onkeyup="filterAddItems('magic')">
+                            <select id="magicCat" class="input-fantasy px-2 py-2 text-sm" onchange="filterMagicCat(this.value)">
+                                <option value="">All</option>${[...new Set((DB.magic_items || []).map(m => m.category))].sort().map(c => `<option>${c}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto" id="magicList">
+                            ${(DB.magic_items || []).map((m, idx) => `
+                                <div class="p-2 border border-purple-300 rounded bg-purple-50 hover:bg-purple-100 cursor-pointer transition-colors" data-cat="${m.category}" onclick="selectAddItem('magic', ${idx})">
+                                    <div class="flex justify-between gap-2">
+                                        <span class="font-bold text-sm">${escapeHtml(m.name)}</span>
+                                        <span class="text-xs text-purple-800 shrink-0">${m.category}${m.xp ? ' · ' + m.xp.toLocaleString() + ' XP' : ''}</span>
+                                    </div>
+                                    <div class="text-xs text-amber-700">${escapeHtml(m.summary || '')}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
                     <div id="addItemTab_custom" class="add-item-tab hidden">
                         <div class="space-y-3">
                             <div>
@@ -258,8 +279,63 @@ function filterAddItems(type) {
     }
 }
 
+function filterMagicCat(cat) {
+    for (const el of $('magicList').children) el.style.display = !cat || el.dataset.cat === cat ? '' : 'none';
+}
+
+// Builds an inventory item from a DMG magic item (base weapon/armor stats + its bonuses)
+function magicItemToInventory(m) {
+    const mods = m.mods || {};
+    const findBase = (list, name) => {
+        if (!name) return null;
+        const n = name.toLowerCase();
+        return list.find(x => x.name.toLowerCase() === n) || list.find(x => x.name.toLowerCase().includes(n) || n.includes(x.name.toLowerCase()))
+            || (n === 'sword' ? list.find(x => x.name === 'Long Sword') : null) || (n.includes('shield') ? list.find(x => x.name === 'Shield, Medium') : null);
+    };
+    const notes = [m.summary, m.charges ? `Charges: ${m.charges}` : '', m.usableBy ? `Usable by: ${m.usableBy}` : '', m.xp ? `XP value ${m.xp}` : ''].filter(Boolean).join(' · ');
+    let item;
+    if (m.appType === 'weapon') {
+        const b = findBase(DB.weapons, m.baseItem) || {};
+        item = { ...b, name: m.name, type: 'weapon', baseName: b.name || m.baseItem || m.name };
+    } else if (m.appType === 'armor') {
+        const b = findBase(DB.armor, m.baseItem) || { ac: 10, weight: 0 };
+        item = { ...b, name: m.name, type: 'armor', ac: b.ac || 10 };
+    } else if (m.appType === 'shield') {
+        const b = findBase(DB.armor, 'Shield, ' + String(m.baseItem || 'Medium').replace(/shield,?\s*/i, '')) || DB.armor.find(x => x.name === 'Shield, Medium') || {};
+        item = { ...b, name: m.name, type: 'shield', ac_bonus: 1 };
+    } else {
+        item = { name: m.name, type: 'gear', weight: 0, cost: 0 };
+    }
+    item.magic = true;
+    item.notes = notes;
+    if (m.charges) item.charges = m.charges;
+    const extra = {}; const sets = {};
+    Object.entries(mods).forEach(([k, v]) => {
+        if (k === 'bonusAttack' || k === 'bonusDamage' || k === 'bonusAC') return;
+        if (k === 'strEx') { sets.strEx = v; return; }
+        if (v && typeof v === 'object' && v.set != null) sets[k] = v.set; else if (typeof v === 'number') extra[k] = v;
+    });
+    if (Object.keys(extra).length || Object.keys(sets).length) item.itemMods = { mods: extra, sets };
+    return { item, mods };
+}
+
 function selectAddItem(type, idx) {
     let item;
+    if (type === 'magic') {
+        const r = magicItemToInventory(DB.magic_items[idx]);
+        selectedAddItem = { ...r.item, source: 'dmg' };
+        $('itemModifierPanel').classList.remove('hidden');
+        $('modAttack').value = r.mods.bonusAttack || 0;
+        $('modDamage').value = r.mods.bonusDamage || 0;
+        $('modAC').value = r.mods.bonusAC || 0;   // magic armor, shields, rings and cloaks of protection
+        $('modQty').value = 1;
+        $('modSpecial').value = '';
+        const t = r.item.type;
+        $('modAttackWrap').style.display = t === 'weapon' ? '' : 'none';
+        $('modDamageWrap').style.display = t === 'weapon' ? '' : 'none';
+        $('modACWrap').style.display = t === 'weapon' ? 'none' : '';
+        return;
+    }
     if (type === 'weapon') item = DB.weapons[idx];
     else if (type === 'armor') item = DB.armor[idx];
     else item = DB.gear[idx];

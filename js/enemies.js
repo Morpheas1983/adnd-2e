@@ -82,7 +82,7 @@ const ENEMY_TEMPLATES = [
     { id: 'troll', group: 'Giants & big brutes', name: 'Troll', kind: 'monster', hd: '6+6', ac: 4, move: 12, morale: 14, size: 'L', attacks: 3, damage: '1d4+4/1d4+4/2d6',
       weapons: '', special: 'Regenerates 3 HP/round (not fire or acid). Rises again unless burned.', xpBonus: 980 },
     { id: 'hillgiant', group: 'Giants & big brutes', name: 'Hill Giant', kind: 'monster', hd: '12+2', ac: 3, move: 12, morale: 14, size: 'H', attacks: 1, damage: '1d6 or weapon 2d6+7',
-      weapons: 'Club:2d6+7, Thrown Rock:2d8', special: 'Hurl rocks (2d8, 200 yards). Catch missiles 30%.' },
+      weapons: 'Club:2d6+7, Thrown Rock:2d8', special: 'Hurl rocks (2d8, 200 yards). Catch missiles 30%.', xpBonus: 1000 },
 
     // ---------- Undead ----------
     { id: 'skeleton', group: 'Undead', name: 'Skeleton', kind: 'monster', hd: '1', ac: 7, move: 12, morale: 20, size: 'M', attacks: 1, damage: '1d6 (weapon)',
@@ -119,22 +119,26 @@ function parseHD(str) {
 function hdText(h) { return h.half ? '1/2' : `${h.n}${h.plus > 0 ? '+' + h.plus : h.plus < 0 ? h.plus : ''}`; }
 // "Effective" HD for THAC0 / saves: +3 or more counts as one more HD; less than 1 HD = 0
 function effHD(h) { if (h.half || h.n < 1 || (h.n === 1 && h.plus < 0)) return 0; return h.n + (h.plus >= 3 ? 1 : 0); }
+// DMG Table 39: THAC0 by Hit Dice; it stops at 5 for 16+ HD
 function monsterTHAC0(h) {
     const e = effHD(h);
     if (e === 0) return 20;
-    return Math.max(1, 19 - 2 * Math.floor((e - 1) / 2));
+    return Math.max(5, 19 - 2 * Math.floor((e - 1) / 2));
 }
-// DMG Table 31
+// DMG p.65: monsters save as warriors of their HD; every 4 points (or part) of HD bonus adds one level (5+6 saves as 7th)
+function saveHD(h) { if (h.half || h.n < 1) return 0; return h.n + (h.plus > 0 ? Math.ceil(h.plus / 4) : 0); }
+// DMG Table 31 (p.47)
 function xpForHD(h) {
-    if (h.half || h.n < 1) return 7;
+    if (h.half || h.n < 1 || (h.n === 1 && h.plus < -1)) return 7;      // "less than 1-1"
     const n = h.n, plus = h.plus;
-    if (n === 1 && plus < 0) return 15;
-    if (n === 1 && plus <= 0) return 15;
-    if ((n === 1 && plus > 0) || (n === 2 && plus <= 0)) return 35;
-    const table = [[3, 65], [4, 120], [5, 175], [6, 270], [7, 420], [8, 650], [9, 975], [10, 1400], [12, 2000]];
+    if (n === 1 && plus <= 0) return 15;                                  // "1-1 to 1"
+    if (n >= 13) return 2000 + 1000 * (n - 12);                           // "13+"
+    if (n >= 11) return 2000;                                             // "11 to 12+"
+    if (n === 10 || (n === 9 && plus > 0)) return 1400;                   // "9+1 to 10+"
+    const table = [[2, 35], [3, 65], [4, 120], [5, 175], [6, 270], [7, 420], [8, 650], [9, 975]];
     const eff = plus > 0 ? n + 1 : n;   // "2+1 to 3" = 65
     for (const [max, xp] of table) if (eff <= max) return xp;
-    return 3000 + 1000 * Math.max(0, n - 13);
+    return 1400;
 }
 function avgHP(h) { if (h.half) return 2; return Math.max(1, Math.round(h.n * 4.5 + h.plus)); }
 function rollHP(h) { if (h.half) return rollDie(4); let t = h.plus; for (let i = 0; i < h.n; i++) t += rollDie(8); return Math.max(1, t); }
@@ -186,13 +190,15 @@ function statsFor(t, rank, lvl, plus, cls) {
     if (t.kind === 'npc') {
         const saves = {}; SAVE_TYPES.forEach(s => { saves[s] = getSave(cls, lvl, s); });
         const h = { n: lvl, plus: 0, half: lvl < 1 };
-        const xp = xpForHD(h) + (/(Mage|Cleric|Druid|Specialist)/.test(cls) && lvl > 0 ? Math.round(lvl * 20) : 0);
+        // DMG Table 32: spellcasters count as +1 HD (spells up to 2nd level) or +2 HD (3rd-level spells or more)
+        const casts = typeof getSpellSlots === 'function' ? getSpellSlots(cls, lvl).length : 0;
+        const xp = xpForHD({ n: lvl + (casts >= 3 ? 2 : casts > 0 ? 1 : 0), plus: 0, half: lvl < 1 });
         return { ...base, kind: 'npc', cls, level: lvl, hd: npcHD(cls, lvl), thac0: npcTHAC0(cls, lvl), saves, xp,
             damage: (base.weapons || '').split(',').map(w => (w.split(':')[1] || '').trim()).filter(Boolean)[0] || '1d6', hpAvg: npcHP(cls, lvl, 'avg') };
     }
     const h = lvl === 'half' ? { n: 0, plus: 0, half: true } : { n: lvl, plus: plus || 0 };
     const e = effHD(h);
-    const saves = {}; SAVE_TYPES.forEach(s => { saves[s] = getSave('Fighter', e, s); });
+    const saves = {}; SAVE_TYPES.forEach(s => { saves[s] = getSave('Fighter', saveHD(h), s); });
     const xpBonus = r.xpBonus !== undefined ? r.xpBonus : (t.xpBonus || 0);
     return { ...base, kind: 'monster', level: h.half ? 0 : h.n, plus: h.plus, hd: hdText(h), thac0: monsterTHAC0(h), saves,
         xp: xpForHD(h) + xpBonus, damage: pick('damage') || '', hpAvg: avgHP(h) };

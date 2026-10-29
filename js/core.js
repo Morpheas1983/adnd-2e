@@ -190,6 +190,7 @@ function docToChar(d) {
     c.playerName = x.playerName || c.playerName || '';
     c.campaignId = x.campaignId || 'default';
     c._dm = (x.dmUids || []).slice().sort().join(',');
+    if (typeof migrateCharNames === 'function') migrateCharNames(c);
     return c;
 }
 

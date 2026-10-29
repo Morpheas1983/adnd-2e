@@ -118,12 +118,11 @@ function confirmLevelUp() {
         saveNewCustomProfs(char, v.customs);
     }
     if (char.class === 'Thief' || char.class === 'Bard') {
-        DB.thieving_skills.forEach(s => {
-            char.thiefSkills[s.name] = (char.thiefSkills[s.name] || s.base) + Math.floor(Math.random() * 6) + 1;
-        });
+        // PHB: no random increase; the character gets new points to spend on the sheet
+        if (!char.thiefPoints) char.thiefPoints = rogueSkillPoints(char);
     }
     Storage.save();
-    toast(`Level up! ${char.name} is now level ${char.level}!`);
+    toast(`Level up! ${char.name} is now level ${char.level}!${hasThiefSkills(char) ? ` ${char.class === 'Bard' ? 15 : 30} new skill points to spend on the sheet.` : ''}`);
     changeView('sheet');
 }
 

@@ -101,6 +101,7 @@ const NWP_META = {
 
 // Add the PHB proficiencies that the original list didn't have, then keep the list sorted
 (function extendNonweaponList() {
+    if (DB.nwp_meta) Object.entries(DB.nwp_meta).forEach(([n, m]) => { NWP_META[n] = { ...(NWP_META[n] || {}), ...m }; });
     const have = new Set(DB.nonweapon_proficiencies.map(p => p.name));
     Object.entries(NWP_META).forEach(([name, m]) => {
         if (!have.has(name) && m.ability) DB.nonweapon_proficiencies.push({ name, ability: m.ability, mod: m.mod || 0 });
@@ -125,7 +126,8 @@ function intBonusSlots(intScore) {
     if (i === 16) return 5;
     if (i === 17) return 6;
     if (i === 18) return 7;
-    return 8 + Math.max(0, i - 19); // 19: 8, 20: 9, ...
+    if (typeof intRow === 'function') return intRow(i)[0];   // PHB Table 4: 19: 8 ... 24: 15, 25: 20
+    return 8 + Math.max(0, i - 19);
 }
 
 function nwpInfo(name) {
@@ -139,7 +141,9 @@ function nwpCost(className, name) {
     if ((FREE_NWP[className] || []).includes(name)) return 0;
     const info = nwpInfo(name);
     const g = classGroup(className);
-    const inGroup = info.groups.includes('general') || info.groups.includes(g);
+    // PHB Table 38: some classes also use another group at normal cost
+    const groups = [g, ...(((typeof DB !== 'undefined' && DB.class_crossovers) || {})[className] || [])];
+    const inGroup = info.groups.includes('general') || groups.some(x => info.groups.includes(x));
     return info.slots + (inGroup ? 0 : 1);
 }
 
@@ -153,9 +157,10 @@ function specializationCost(name) { return isBowProf(name) ? 2 : 1; }
 function profSlotSummary(opts) {
     const g = PROF_TABLE[classGroup(opts.className)];
     const level = Math.max(1, parseInt(opts.level) || 1);
-    const wpTotal = g.wp + Math.floor((level - 1) / g.wpEvery);
+    // PHB Table 34: a new slot at every level evenly divisible by the number (warriors: 3rd, 6th, 9th...)
+    const wpTotal = g.wp + Math.floor(level / g.wpEvery);
     const intBonus = intBonusSlots(opts.intScore);
-    const nwpBase = g.nwp + Math.floor((level - 1) / g.nwpEvery);
+    const nwpBase = g.nwp + Math.floor(level / g.nwpEvery);
     const wps = opts.weaponProfs || [];
     const specs = (opts.weaponSpecs || []).filter(s => wps.includes(s));
     const wpUsed = wps.length + specs.reduce((n, s) => n + specializationCost(s), 0);
@@ -194,10 +199,20 @@ function weaponProfFor(item) {
     return best;
 }
 
-// Attacks per round for warriors (PHB Table 14) and specialists (PHB Table 35); "3/2" means 3 every 2 rounds
-function attacksPerRound(char, specialized) {
+// Attacks per round for warriors (PHB Table 15) and specialists (PHB Table 35); "3/2" means 3 every 2 rounds.
+// Bows, crossbows, slings and darts use their rate of fire (PHB Table 45); specialists use Table 35's missile columns.
+const SPEC_MISSILE = { light: ['1', '3/2', '2'], heavy: ['1/2', '1', '3/2'], dart: ['4', '5', '6'], other: ['3/2', '2', '5/2'] };
+function attacksPerRound(char, specialized, weapon) {
     const lvl = char.level || 1;
     const warrior = classGroup(char.class) === 'warrior';
+    const n = weapon ? String(weapon.baseName || weapon.name || '') : '';
+    if (/bow|sling|blowgun|dart/i.test(n)) {
+        const db = (DB.weapons || []).find(w => w.name === n) || (DB.weapons || []).find(w => n.toLowerCase().includes(w.name.toLowerCase()));
+        const band = lvl >= 13 ? 2 : lvl >= 7 ? 1 : 0;
+        const col = /crossbow, heavy|heavy crossbow/i.test(n) ? 'heavy' : /crossbow/i.test(n) ? 'light' : /dart/i.test(n) ? 'dart' : /sling|blowgun/i.test(n) ? 'other' : null;
+        if (specialized && col) return SPEC_MISSILE[col][band];
+        if (db && db.rof) return String(db.rof);
+    }
     if (specialized) return lvl >= 13 ? '5/2' : lvl >= 7 ? '2' : '3/2';
     if (warrior) return lvl >= 13 ? '2' : lvl >= 7 ? '3/2' : '1';
     return '1';
@@ -230,7 +245,7 @@ function weaponAttackInfo(char, weapon) {
         baseThac0: thac0,
         effTHAC0: thac0 - toHit - effHit,
         dmgMod: strDmg + (weapon.bonusDamage || 0) + specDmg + effDmg,
-        attacks: attacksPerRound(char, specialized)
+        attacks: attacksPerRound(char, specialized, weapon)
     };
 }
 

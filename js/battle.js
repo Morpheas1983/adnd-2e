@@ -126,7 +126,7 @@ function renderBattle(container) {
                         <label class="flex items-center gap-1 cursor-pointer"><input type="checkbox" class="accent-amber-700" ${Battle.rerollEachRound ? 'checked' : ''} onchange="Battle.rerollEachRound=this.checked; saveBattle();">Re-roll initiative every round</label>
                         ${killsXP ? `<span><i class="fas fa-skull mr-1"></i>XP from defeated creatures: <b>${killsXP}</b></span>` : ''}
                     </div>
-                    <p class="text-xs text-amber-700 mt-1">Initiative: d10 + <b>speed factor</b> of the chosen weapon or spell + modifier, <b>lowest acts first</b>. Spells cast in rounds take effect at the end of the round. Characters' hit points come straight from their sheets and update live.</p>
+                    <p class="text-xs text-amber-700 mt-1">Initiative: d10 + <b>speed factor</b> of the chosen weapon or spell + modifier, <b>lowest acts first</b>. Ties act at the same time. Creatures with natural attacks use the DMG size speed (S/M +3, L +6, H +9, G +12). Spells cast in rounds take effect at the end of the round. Characters' hit points come straight from their sheets and update live.</p>
                 </div>
 
                 ${!order.length ? `
@@ -156,6 +156,7 @@ function battleRow(p, i, pcs) {
             <div class="flex flex-col items-center w-16">
                 <span class="text-xs text-amber-700">Init</span>
                 <input type="number" value="${p.init ?? ''}" placeholder="–" class="input-fantasy w-14 text-center text-lg font-bold px-1 py-1" onchange="setInit('${p.key}', this.value)" aria-label="Initiative">
+                ${p.init != null && Battle.participants.some(x => x !== p && x.init === p.init && !(x.kind === 'npc' && x.defeated)) ? '<span class="text-xs text-purple-800 font-bold" title="Same initiative: acts at the same time">= tie</span>' : ''}
                 <button onclick="rollInit('${p.key}')" class="text-xs text-amber-800 underline mt-1" title="Roll d10 + speed ${speedOf(p)}${p.initMod ? ' ' + formatMod(p.initMod) : ''}"><i class="fas fa-dice-d20"></i> roll</button>
             </div>
             <div class="flex-1 min-w-[180px]">
@@ -173,7 +174,9 @@ function battleRow(p, i, pcs) {
                     <span><b>THAC0</b> ${v.thac0}</span>
                     ${actionHtml(p)}
                     <span title="Other initiative modifier (surprise, haste, situational...)"><b>Mod</b> <input type="number" value="${p.initMod || 0}" class="input-fantasy w-12 text-center px-1 py-0 text-sm" onchange="setInitMod('${p.key}', this.value)"></span>
-                    ${isNpc ? `<span><b>XP</b> <input type="number" value="${p.xp || 0}" class="input-fantasy w-16 text-center px-1 py-0 text-sm" onchange="setXp('${p.key}', this.value)"></span>` : ''}
+                    ${isNpc ? `<span><b>XP</b> <input type="number" value="${p.xp || 0}" class="input-fantasy w-16 text-center px-1 py-0 text-sm" onchange="setXp('${p.key}', this.value)"></span>
+                    <span title="Morale rating (DMG): roll 2d10 equal or under to keep fighting"><b>ML</b> <input type="number" value="${p.morale || ''}" placeholder="–" class="input-fantasy w-12 text-center px-1 py-0 text-sm" onchange="setMorale('${p.key}', this.value)">
+                        <button onclick="rollMorale('${p.key}')" class="text-xs text-amber-800 underline ml-1"><i class="fas fa-flag"></i> check</button></span>` : ''}
                 </div>
             </div>
             <div class="w-full sm:w-64">
@@ -351,6 +354,29 @@ function showAddCombatants() {
         </div>`;
 }
 
+// DMG Table 41: speed factor of natural attacks by size; creatures with weapons use the weapon's speed factor
+const SIZE_SPEED = { T: 0, S: 3, M: 3, L: 6, H: 9, G: 12 };
+function creatureSpeed(size, weapons) {
+    const w = (weapons || [])[0];
+    if (w) {
+        const n = String(w.name || '').toLowerCase();
+        const db = (DB.weapons || []).find(x => n.includes(x.name.toLowerCase()) || x.name.toLowerCase().includes(n));
+        if (db && db.speed != null) return db.speed;
+    }
+    return SIZE_SPEED[String(size || 'M').charAt(0).toUpperCase()] ?? 3;
+}
+function rollMorale(key) {
+    const p = Battle.participants.find(x => x.key === key); if (!p) return;
+    const ml = parseInt(p.morale);
+    if (!ml) return toast('Set a morale rating first (e.g. 11)', 'error');
+    const hpLost = p.maxHp ? 1 - p.hp / p.maxHp : 0;
+    const mod = hpLost >= 0.5 ? -4 : hpLost >= 0.25 ? -2 : 0;
+    const r = rollDie(10) + rollDie(10);
+    const ok = r <= ml + mod;
+    toast(`${p.name} morale: rolled ${r} vs ${ml}${mod ? ` ${mod} (wounded)` : ''} — ${ok ? 'stands and fights' : 'breaks: flees or surrenders'}`, ok ? 'success' : 'error');
+}
+function setMorale(key, v) { const p = Battle.participants.find(x => x.key === key); if (!p) return; p.morale = parseInt(v) || ''; saveBattle(); }
+
 function addCombatants() {
     let added = 0;
     document.querySelectorAll('input[name="addPc"]:checked').forEach(cb => {
@@ -366,7 +392,8 @@ function addCombatants() {
         for (let i = 0; i < n && c; i++) {
             const num = sameNameCount(c.name) + 1;
             Battle.participants.push({ key: newKey(), kind: 'npc', baseName: c.name, name: n > 1 || num > 1 ? `${c.name} ${num}` : c.name, source: c.type || 'Bestiary',
-                hd: c.hd || '', hp: c.maxHp || c.hp || 1, maxHp: c.maxHp || c.hp || 1, ac: c.ac, thac0: c.thac0, xp: c.xp || 0, init: null, initMod: 0 });
+                hd: c.hd || '', hp: c.maxHp || c.hp || 1, maxHp: c.maxHp || c.hp || 1, ac: c.ac, thac0: c.thac0, xp: c.xp || 0, init: null, initMod: 0,
+                speed: creatureSpeed(c.size, c.weapons), morale: parseInt(c.morale) || '' });
             added++;
         }
     });
@@ -379,7 +406,8 @@ function addCombatants() {
             const hp = $('mmHp').value === 'avg' ? Math.max(1, calculateMonsterHP(info, Math.max(1, info.count)).avg) : rollMonsterHPValue(m.hd);
             const num = sameNameCount(mm) + 1;
             Battle.participants.push({ key: newKey(), kind: 'npc', baseName: mm, name: qty > 1 || num > 1 ? `${mm} ${num}` : mm, source: m.category || 'Monster',
-                hd: m.hd, hp, maxHp: hp, ac: m.ac, thac0: m.thac0, xp: m.xp || 0, init: null, initMod: 0 });
+                hd: m.hd, hp, maxHp: hp, ac: m.ac, thac0: m.thac0, xp: m.xp || 0, init: null, initMod: 0,
+                speed: creatureSpeed(m.size), morale: parseInt(m.morale) || '' });
             added++;
         }
     }

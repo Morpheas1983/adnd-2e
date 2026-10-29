@@ -235,9 +235,10 @@ function nextStep() {
         for (let s of stats) {
             const val = parseInt($('stat_'+s).value);
             const raceMin = r['min_'+s], raceMax = r['max_'+s];
-            const classMin = cls?.requirements?.[s] || 0;
+            const classMin = classMinFor(clsName, $('charKit').value, s);
             if (val < raceMin || val > raceMax) return toast(`${s.toUpperCase()} must be between ${raceMin} and ${raceMax} for ${race}`, 'error');
-            if (val < classMin) return toast(`${s.toUpperCase()} must be at least ${classMin} for ${clsName}`, 'error');
+            const adj = val + ((r.adjustments || {})[s] || 0);
+            if (adj < classMin) return toast(`${s.toUpperCase()} must be at least ${classMin} for ${clsName}${(r.adjustments || {})[s] ? ' (after the racial adjustment)' : ''}`, 'error');
         }
     }
     if (createStep === 4) {
@@ -274,6 +275,15 @@ function updateWizardUI() {
     }
 }
 
+// Class minimum for an ability, including the specialist wizard's extra requirement (PHB Tables 13 and 22)
+function classMinFor(clsName, kit, s) {
+    const cls = DB.classes[clsName];
+    let m = cls?.requirements?.[s] || 0;
+    const sp = clsName === 'Specialist Wizard' && typeof PHB !== 'undefined' ? (PHB.specialist_requirements || {})[kit] : null;
+    if (sp && sp.req && sp.req[s]) m = Math.max(m, sp.req[s]);
+    return m;
+}
+
 function updateRacePreview() {
     const race = $('charRace').value;
     const r = DB.races[race];
@@ -281,6 +291,8 @@ function updateRacePreview() {
         <strong>${race}</strong><br>
         STR: ${r.min_str}-${r.max_str} | DEX: ${r.min_dex}-${r.max_dex} | CON: ${r.min_con}-${r.max_con}<br>
         INT: ${r.min_int}-${r.max_int} | WIS: ${r.min_wis}-${r.max_wis} | CHA: ${r.min_cha}-${r.max_cha}<br>
+        ${Object.keys(r.adjustments || {}).length ? `<b>Racial adjustments:</b> ${Object.entries(r.adjustments).map(([k, v]) => `${formatMod(v)} ${k.toUpperCase()}`).join(', ')} (applied after rolling; the limits above are checked before them)<br>` : ''}
+        ${r.nonPHB ? '<span style="color:#991b1b">Not a PHB race (kept for older characters).</span><br>' : ''}
         <em>${r.special}</em><br>
         Infravision: ${r.infravision}' | Size: ${r.size}
     `;
@@ -312,9 +324,9 @@ function updateStatPreview() {
             int: [0, `Lang ${intRow(val)[0]}`], wis: [wisMagicDefense(val), `MD ${formatMod(wisMagicDefense(val))}`], cha: [chaRow(val)[2], `React ${formatMod(chaRow(val)[2])}`] }[s];
         const mod = phb[0];
         const raceMin = r['min_'+s], raceMax = r['max_'+s];
-        const classMin = cls?.requirements?.[s] || 0;
+        const classMin = classMinFor(clsName, $('charKit')?.value, s);
         const raceValid = val >= raceMin && val <= raceMax;
-        const classValid = val >= classMin;
+        const classValid = val + ((r.adjustments || {})[s] || 0) >= classMin;
         const valid = raceValid && classValid;
 
         const box = $(`stat_${s}`).closest('.stat-box');
@@ -365,7 +377,13 @@ function updateClassOptions() {
         preview.innerHTML = '';
         return;
     }
-    const kits = DB.kits[cls] || [{name:'None', source:'PHB', desc:'Standard ' + cls}];
+    let kits = DB.kits[cls] || [{name:'None', source:'PHB', desc:'Standard ' + cls}];
+    if (cls === 'Specialist Wizard') {
+        // PHB Table 22: each specialty is open only to some races
+        const race = $('charRace').value;
+        const req = (typeof PHB !== 'undefined' && PHB.specialist_requirements) || {};
+        kits = kits.filter(k => !req[k.name] || req[k.name].races.includes(race));
+    }
     kitSelect.innerHTML = kits.map(k => `<option value="${k.name}">${k.name} (${k.source})</option>`).join('');
     const c = DB.classes[cls];
     preview.innerHTML = `
@@ -448,10 +466,11 @@ function updateProfGate() {
 function rollStartingGold() {
     const cls = $('charClass').value;
     let gold = 0;
-    if (['Fighter','Paladin','Ranger'].includes(cls)) gold = rollDie(6)*10 + rollDie(6)*10 + rollDie(6)*10 + rollDie(6)*10 + rollDie(6)*10;
-    else if (['Mage','Specialist Wizard'].includes(cls)) gold = rollDie(4)*10 + rollDie(4)*10 + rollDie(4)*10 + rollDie(4)*10;
-    else if (['Cleric','Druid'].includes(cls)) gold = rollDie(6)*10 + rollDie(6)*10 + rollDie(6)*10;
-    else if (['Thief','Bard'].includes(cls)) gold = rollDie(6)*10 + rollDie(6)*10 + rollDie(6)*10;
+    // PHB Table 43: warrior 5d4×10, wizard (1d4+1)×10, priest 3d6×10, rogue 2d6×10
+    const g = (DB.starting_gold || {})[classGroup(cls)] || [3, 6, 10, 0];
+    let roll = g[3] || 0;
+    for (let i = 0; i < g[0]; i++) roll += rollDie(g[1]);
+    gold = roll * g[2];
     $('charGold').value = gold;
     tempGold = gold;
     updateGoldDisplay();
@@ -520,14 +539,16 @@ function finishCreation() {
         campaignId: State.campaignId || 'default',
         lastUpdated: Date.now()
     };
-    // Warriors with 18 Strength roll percentile (exceptional) strength
-    if (stats.str === 18 && canHaveExStr(cls) && !stats.strEx) {
+    // PHB Table 8: racial ability adjustments, applied after the Table 7 limits were checked
+    const adjust = (DB.races[race] || {}).adjustments || {};
+    Object.entries(adjust).forEach(([s, v]) => { stats[s] = Math.max(3, Math.min(19, (stats[s] || 10) + v)); });
+    if (Object.keys(adjust).length) char.racialAdjusted = true;
+    // Warriors with 18 Strength roll percentile (exceptional) strength (not halflings)
+    if (stats.str === 18 && canHaveExStr(cls, race) && !stats.strEx) {
         stats.strEx = rollDie(100);
         toast(`Exceptional strength rolled: 18/${stats.strEx >= 100 ? '00' : String(stats.strEx).padStart(2, '0')}`);
     }
-    if (cls === 'Thief' || cls === 'Bard') {
-        DB.thieving_skills.forEach(s => char.thiefSkills[s.name] = s.base);
-    }
+    if (cls === 'Thief' || cls === 'Bard') char.thiefPoints = {};   // PHB: 60 (bard 20) points to spend on the sheet
     saveNewCustomProfs(char, customs);
     State.characters.push(char);
     Storage.save();

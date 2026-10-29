@@ -391,19 +391,9 @@ function renderSheet(container) {
                         <div class="parchment scroll-border p-4 fade-in" id="profPanel">
                             ${renderProfPanel(char, profSum)}
                         </div>
-                        ${char.class === 'Thief' || char.class === 'Bard' ? `
-                        <div class="parchment scroll-border p-4 fade-in">
-                            <div class="section-header"><i class="fas fa-mask"></i>Thieving Skills</div>
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                ${DB.thieving_skills.map(s => `
-                                    <div class="saving-throw-box">
-                                        <div class="value">${(char.thiefSkills?.[s.name] || s.base)}%</div>
-                                        <div class="label">${s.name}</div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>
-                        ` : ''}
+                        ${renderRogueSkillsPanel(char)}
+                        ${renderRangerPanel(char)}
+                        ${renderTurnUndeadPanel(char)}
                         ${magicAccess(char) ? `
                         <div class="parchment scroll-border p-4 fade-in">
                             <div class="section-header justify-between"><span><i class="fas fa-hat-wizard mr-2"></i>${magicAccess(char).kind === 'wizard' ? 'Schools of Magic' : 'Spheres of Influence'}</span>
@@ -552,12 +542,8 @@ function confirmChangeClass() {
     char.selectedSchools = [];
     char.selectedSpheres = [];
 
-    if (newClass === 'Thief' || newClass === 'Bard') {
-        char.thiefSkills = {};
-        DB.thieving_skills.forEach(s => char.thiefSkills[s.name] = s.base);
-    } else {
-        char.thiefSkills = {};
-    }
+    char.thiefSkills = {};
+    char.thiefPoints = {};   // PHB: skill points are spent on the sheet
 
     char.lastUpdated = Date.now();
     Storage.save();

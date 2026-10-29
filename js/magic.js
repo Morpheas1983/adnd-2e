@@ -56,10 +56,12 @@ const WIZARD_SCHOOLS_FIX = {
 
 (function fixSpellData() {
     DB.priest_spells.forEach(s => {
+        if (Array.isArray(s.spheres) && s.spheres.length) return;   // PHB data already lists every sphere
         const list = PRIEST_SPHERES_FIX[s.name] || [s.sphere || 'All'];
         s.spheres = list; s.sphere = list.join(', ');
     });
     DB.wizard_spells.forEach(s => {
+        if (Array.isArray(s.schools) && s.schools.length) return;   // PHB data already lists every school
         if (s.school === 'Transmutation') s.school = 'Alteration';
         const list = WIZARD_SCHOOLS_FIX[s.name] || [s.school];
         s.schools = list; s.school = list.join(', ');
@@ -116,7 +118,7 @@ function availableSpellsFor(char) {
 }
 
 /* Bonus priest spells from high Wisdom (PHB Table 5), cumulative. Index = spell level - 1 */
-const WIS_BONUS = { 13: [1], 14: [1], 15: [2], 16: [2], 17: [3], 18: [4], 19: [1, 3], 20: [2, 4], 21: [3, 5], 22: [4, 5], 23: [1, 6], 24: [5, 6], 25: [6, 7] };
+const WIS_BONUS = (typeof PHB !== 'undefined' && PHB.wis_bonus) || { 13: [1], 14: [1], 15: [2], 16: [2], 17: [3], 18: [4], 19: [1, 4], 20: [2, 4], 21: [3, 5], 22: [4, 5], 23: [5, 5], 24: [6, 6], 25: [6, 7] };
 function wisdomBonusSpells(wis, maxLevel) {
     const bonus = [];
     for (let w = 13; w <= Math.min(25, parseInt(wis) || 0); w++) (WIS_BONUS[w] || []).forEach(l => { if (l <= maxLevel) bonus[l - 1] = (bonus[l - 1] || 0) + 1; });
@@ -136,9 +138,15 @@ function spellSlotsFor(char) {
     let note = '';
     if (char.class === 'Specialist Wizard') { base.forEach((_, i) => { bonus[i] += 1; }); note = '+1 per level for the specialty school'; }
     if (['Cleric', 'Druid'].includes(char.class)) {
-        const wb = wisdomBonusSpells(getModifiedStat(char, 'wis'), base.length);
+        const wis = getModifiedStat(char, 'wis');
+        const wb = wisdomBonusSpells(wis, base.length);
         wb.forEach((n, i) => { if (n) bonus[i] += n; });
         if (wb.some(Boolean)) note = 'includes bonus spells for high Wisdom';
+        // PHB Table 24: 6th-level spells need Wisdom 17, 7th-level spells need Wisdom 18
+        const blocked = [];
+        if (base.length >= 6 && wis < 17) { base[5] = 0; bonus[5] = 0; blocked.push('6th-level (needs WIS 17)'); }
+        if (base.length >= 7 && wis < 18) { base[6] = 0; bonus[6] = 0; blocked.push('7th-level (needs WIS 18)'); }
+        if (blocked.length) note = (note ? note + '; ' : '') + 'no ' + blocked.join(', ') + ' spells';
     }
     return { slots: base.map((n, i) => n + bonus[i]), bonus, note };
 }

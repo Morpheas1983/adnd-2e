@@ -17,7 +17,8 @@ const STR_EX_TABLE = [
     [50, [1, 3, 135, 280, 12, 0, 20]], [75, [2, 3, 160, 305, 13, 0, 25]], [90, [2, 4, 185, 330, 14, 0, 30]],
     [99, [2, 5, 235, 380, 15, 3, 35]], [100, [3, 6, 335, 480, 16, 6, 40]]
 ];
-function canHaveExStr(className) { return (typeof classGroup === 'function' ? classGroup(className) : '') === 'warrior'; }
+// Exceptional strength: warriors only, and never halflings (PHB Table 7 footnote)
+function canHaveExStr(className, race) { return race !== 'Halfling' && (typeof classGroup === 'function' ? classGroup(className) : '') === 'warrior'; }
 function strRow(score, ex) {
     const s = Math.max(1, Math.min(25, parseInt(score) || 10));
     if (s === 18 && ex > 0) return (STR_EX_TABLE.find(([max]) => ex <= max) || STR_EX_TABLE[4])[1];
@@ -27,10 +28,10 @@ function strLabel(score, ex) { return parseInt(score) === 18 && ex > 0 ? `18/${e
 // Exceptional strength actually in effect for this character (a condition that SETS strength can give its own, e.g. 18/00)
 function getStrEx(char) {
     let setEx = null, setStr = null;
-    (char.activeEffects || []).forEach(e => { if (e.sets && e.sets.str != null && e.sets.str !== '') { setStr = parseInt(e.sets.str); setEx = e.sets.strEx != null ? parseInt(e.sets.strEx) : null; } });
+    (typeof effectSources === 'function' ? effectSources(char) : (char.activeEffects || [])).forEach(e => { if (e.sets && e.sets.str != null && e.sets.str !== '') { setStr = parseInt(e.sets.str); setEx = e.sets.strEx != null ? parseInt(e.sets.strEx) : null; } });
     if (getModifiedStat(char, 'str') !== 18) return 0;
     if (setStr === 18) return setEx || 0;                               // magic item: its own value, any class
-    if (!canHaveExStr(char.class)) return 0;
+    if (!canHaveExStr(char.class, char.race)) return 0;
     if ((char.stats || {}).str !== 18) return 0;                         // raised to 18 by a +/- effect: no percentile
     return Math.max(0, Math.min(100, parseInt((char.stats || {}).strEx) || 0));
 }
@@ -98,12 +99,12 @@ const WIS_TABLE = {
     1: [-6, '', 80, ''], 2: [-4, '', 60, ''], 3: [-3, '', 50, ''], 4: [-2, '', 45, ''], 5: [-1, '', 40, ''], 6: [-1, '', 35, ''], 7: [-1, '', 30, ''],
     8: [0, '', 25, ''], 9: [0, '0', 20, ''], 10: [0, '0', 15, ''], 11: [0, '0', 10, ''], 12: [0, '0', 5, ''], 13: [0, '1st', 0, ''], 14: [0, '1st', 0, ''],
     15: [1, '2nd', 0, ''], 16: [2, '2nd', 0, ''], 17: [3, '3rd', 0, ''], 18: [4, '4th', 0, ''],
-    19: [4, '1st, 3rd', 0, 'Cause fear, Charm person, Command, Friends, Hypnotism'],
+    19: [4, '1st, 4th', 0, 'Cause fear, Charm person, Command, Friends, Hypnotism'],
     20: [4, '2nd, 4th', 0, '+ Forget, Hold person, Ray of enfeeblement, Scare'],
     21: [4, '3rd, 5th', 0, '+ Fear'],
     22: [4, '4th, 5th', 0, '+ Charm monster, Confusion, Emotion, Fumble, Suggestion'],
-    23: [4, '1st, 6th', 0, '+ Chaos, Feeblemind, Hold monster, Magic jar, Quest'],
-    24: [4, '5th, 6th', 0, '+ Geas, Mass suggestion, Rod of rulership'],
+    23: [4, '5th, 5th', 0, '+ Chaos, Feeblemind, Hold monster, Magic jar, Quest'],
+    24: [4, '6th, 6th', 0, '+ Geas, Mass suggestion, Rod of rulership'],
     25: [4, '6th, 7th', 0, '+ Antipathy/sympathy, Death spell, Mass charm']
 };
 function wisRow(score) { return WIS_TABLE[Math.max(1, Math.min(25, parseInt(score) || 10))]; }
@@ -138,7 +139,7 @@ function abilityBoxLine(char, s) {
 function renderAbilityDetails(char) {
     const st = strInfo(char), dx = getModifiedStat(char, 'dex'), co = conInfo(char), it = intInfo(char), wi = wisInfo(char), ch = chaInfo(char);
     const canEdit = typeof canWriteChar === 'function' ? canWriteChar(char) : true;
-    const exEligible = canHaveExStr(char.class) && (char.stats || {}).str === 18;
+    const exEligible = canHaveExStr(char.class, char.race) && (char.stats || {}).str === 18;
     const open = State.abilityDetailsOpen !== false;
     const row = (label, value, title) => `<div class="flex justify-between gap-2 py-0.5 border-b border-amber-200 last:border-0" ${title ? `title="${escapeHtml(title)}"` : ''}><span class="text-amber-800">${label}</span><span class="font-bold text-amber-900 text-right">${value}</span></div>`;
     const block = (title, score, rows) => `<div class="bg-amber-50 rounded border border-amber-300 p-2"><div class="font-bold text-amber-900 text-sm mb-1 flex justify-between"><span>${title}</span><span class="fantasy-font">${score}</span></div><div class="text-xs">${rows}</div></div>`;

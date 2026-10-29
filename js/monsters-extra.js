@@ -143,10 +143,10 @@
         const m = s.match(/^(\d+)\s*([+-]\s*\d+)?/);
         return m ? { n: parseInt(m[1]), plus: m[2] ? parseInt(m[2].replace(/\s/g, '')) : 0 } : { n: 1, plus: 0 };
     }
-    function thac0For(h) { const e = h.n < 1 || (h.n === 1 && h.plus < 0) ? 0 : h.n + (h.plus >= 3 ? 1 : 0); return e === 0 ? 20 : Math.max(1, 19 - 2 * Math.floor((e - 1) / 2)); }
+    function thac0For(h) { const e = h.n < 1 || (h.n === 1 && h.plus < 0) ? 0 : h.n + (h.plus >= 3 ? 1 : 0); return e === 0 ? 20 : Math.max(5, 19 - 2 * Math.floor((e - 1) / 2)); }
     const WARRIOR_SAVES = [[0, '16/18/17/20/19'], [2, '14/16/15/17/17'], [4, '13/15/14/16/16'], [6, '11/13/12/13/14'], [8, '10/12/11/12/13'],
         [10, '8/10/9/9/11'], [12, '7/9/8/8/10'], [14, '5/7/6/5/8'], [16, '4/6/5/4/7'], [99, '3/5/4/4/6']];
-    function savesFor(h) { const e = h.n < 1 ? 0 : h.n + (h.plus >= 3 ? 1 : 0); return WARRIOR_SAVES.find(r => e <= r[0])[1]; }
+    function savesFor(h) { const e = h.n < 1 ? 0 : h.n + (h.plus > 0 ? Math.ceil(h.plus / 4) : 0); return WARRIOR_SAVES.find(r => e <= r[0])[1]; }
     const ENCOUNTER = { 'Common': '15%', 'Uncommon': '8%', 'Rare': '3%', 'Very Rare': '1%' };
 
     if (typeof DB === 'undefined' || !DB.monsters) return;
